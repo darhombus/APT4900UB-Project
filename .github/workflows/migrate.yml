@@ -1,0 +1,37 @@
+name: Migrate hosted database
+
+on:
+  # Auto-run when migration files land on staging or main.
+  push:
+    branches: [staging, main]
+    paths:
+      - 'supabase/migrations/**'
+  # Manual trigger — used to bootstrap the hosted database the first time
+  # (when the migrations already exist on every branch, no push changes them),
+  # and to re-run on demand.
+  workflow_dispatch:
+
+# Never cancel an in-flight migration.
+concurrency:
+  group: migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link the hosted project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push migrations (idempotent — applies only unseen migrations)
+        run: supabase db push
