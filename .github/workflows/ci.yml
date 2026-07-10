@@ -15,12 +15,21 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     env:
-      # Placeholder PUBLIC_ values so `svelte-kit sync`, `svelte-check`, and the
-      # build can resolve $env/static/public. CI only compiles the app; it never
-      # connects to Supabase, so these need only be non-empty.
+      # Placeholder values so `svelte-kit sync` generates the $env/static/public
+      # and $env/static/private ambient types, letting svelte-check and the build
+      # resolve every env import (notably src/lib/server/env.ts). CI only compiles
+      # the app; it never connects to Supabase, so these need only be non-empty.
       PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       PUBLIC_SUPABASE_ANON_KEY: sb_publishable_placeholder
+      PUBLIC_PAYSTACK_PUBLIC_KEY: pk_test_placeholder
       PUBLIC_APP_URL: http://localhost:5173
+      SUPABASE_SERVICE_ROLE_KEY: sb_secret_placeholder
+      PAYSTACK_SECRET_KEY: placeholder
+      INNGEST_EVENT_KEY: placeholder
+      INNGEST_SIGNING_KEY: placeholder
+      AT_API_KEY: placeholder
+      AT_USERNAME: sandbox
+      RESEND_API_KEY: placeholder
     steps:
       - uses: actions/checkout@v4
 
