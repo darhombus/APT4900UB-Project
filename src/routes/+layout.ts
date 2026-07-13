@@ -31,5 +31,7 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		data: { user }
 	} = await supabase.auth.getUser();
 
-	return { supabase, session, user };
+	// Forward the server-loaded header profile (avatar + name) so the layout can
+	// render it. `data` is null-safe: it's undefined only before the server load runs.
+	return { supabase, session, user, profile: data?.profile ?? null };
 };

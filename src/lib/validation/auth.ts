@@ -66,6 +66,22 @@ export const signupSchema = z
 		path: ['confirmPassword']
 	});
 
+export const profileSchema = z.object({
+	fullName: z.string().trim().min(2, 'Enter your full name').max(120, 'Name is too long'),
+	phone,
+	// Optional free-text; empty string is allowed and stored as null by the action.
+	location: z.string().trim().max(120, 'Location is too long')
+});
+
+/** Avatar upload constraints, shared by the client preview and the server action. */
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024; // 2 MB (matches the bucket limit)
+export const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const AVATAR_EXT: Record<string, string> = {
+	'image/jpeg': 'jpg',
+	'image/png': 'png',
+	'image/webp': 'webp'
+};
+
 export const loginSchema = z.object({
 	email: z.email('Enter a valid email address'),
 	password: z.string().min(1, 'Enter your password')
