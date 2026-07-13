@@ -36,8 +36,11 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		rules: {
+			// This app deploys at the domain root (no SvelteKit `paths.base`), so plain
+			// internal hrefs like href="/login" are safe. Disable the resolve()
+			// requirement to keep links readable; re-enable if a base path is added.
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );
