@@ -31,7 +31,9 @@
 	{/if}
 
 	{#if form && 'resent' in form && form.resent}
-		<div class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+		<div
+			class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+		>
 			If that account needs verifying, we've sent a fresh link to {form.email}.
 		</div>
 	{/if}

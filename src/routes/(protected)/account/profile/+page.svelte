@@ -57,9 +57,17 @@
 		<h2 class="text-lg font-semibold text-gray-900">Photo</h2>
 		<div class="mt-4 flex items-center gap-5">
 			{#if avatarPreview}
-				<img src={avatarPreview} alt="New avatar preview" class="h-20 w-20 rounded-full object-cover" />
+				<img
+					src={avatarPreview}
+					alt="New avatar preview"
+					class="h-20 w-20 rounded-full object-cover"
+				/>
 			{:else if profile?.avatar_url}
-				<img src={profile.avatar_url} alt="Your avatar" class="h-20 w-20 rounded-full object-cover" />
+				<img
+					src={profile.avatar_url}
+					alt="Your avatar"
+					class="h-20 w-20 rounded-full object-cover"
+				/>
 			{:else}
 				<span
 					class="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-xl font-semibold text-emerald-800"
@@ -111,7 +119,9 @@
 			</div>
 		{/if}
 		{#if form?.section === 'profile' && 'success' in form && form.success}
-			<div class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+			<div
+				class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+			>
 				Profile saved.
 			</div>
 		{/if}
@@ -191,7 +201,9 @@
 			</div>
 		{/if}
 		{#if form?.section === 'password' && 'success' in form && form.success}
-			<div class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+			<div
+				class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+			>
 				Password changed.
 			</div>
 		{/if}

@@ -51,11 +51,7 @@ const password = z.string().min(8, 'Password must be at least 8 characters');
 
 export const signupSchema = z
 	.object({
-		fullName: z
-			.string()
-			.trim()
-			.min(2, 'Enter your full name')
-			.max(120, 'Name is too long'),
+		fullName: z.string().trim().min(2, 'Enter your full name').max(120, 'Name is too long'),
 		email: z.email('Enter a valid email address'),
 		phone,
 		password,

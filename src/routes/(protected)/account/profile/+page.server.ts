@@ -96,7 +96,10 @@ export const actions: Actions = {
 			.update({ avatar_url: versioned })
 			.eq('id', user!.id);
 		if (updateError) {
-			return fail(400, { section: 'avatar', formError: 'Saved the image but could not update your profile.' });
+			return fail(400, {
+				section: 'avatar',
+				formError: 'Saved the image but could not update your profile.'
+			});
 		}
 
 		return { section: 'avatar', success: true };

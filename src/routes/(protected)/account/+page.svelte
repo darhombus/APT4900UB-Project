@@ -9,7 +9,9 @@
 <main class="mx-auto max-w-2xl px-4 py-10">
 	<div class="flex items-center justify-between">
 		<h1 class="text-2xl font-bold text-gray-900">Your account</h1>
-		<a href="/account/profile" class="text-sm font-medium text-emerald-700 underline">Edit profile</a>
+		<a href="/account/profile" class="text-sm font-medium text-emerald-700 underline"
+			>Edit profile</a
+		>
 	</div>
 	<p class="mt-1 text-sm text-gray-600">You're signed in.</p>
 

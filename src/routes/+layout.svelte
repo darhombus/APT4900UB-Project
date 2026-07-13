@@ -46,7 +46,12 @@
 		<a href="/" class="text-lg font-bold text-gray-900">Marketplace</a>
 		<div class="flex items-center gap-4 text-sm">
 			{#if session}
-				<a href="/account/profile" class="flex items-center" title="Edit profile" aria-label="Profile">
+				<a
+					href="/account/profile"
+					class="flex items-center"
+					title="Edit profile"
+					aria-label="Profile"
+				>
 					{#if profile?.avatar_url}
 						<img
 							src={profile.avatar_url}
