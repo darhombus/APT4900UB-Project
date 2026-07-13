@@ -1,0 +1,54 @@
+<script lang="ts">
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+</script>
+
+<svelte:head><title>Account · Marketplace</title></svelte:head>
+
+<main class="mx-auto max-w-2xl px-4 py-10">
+	<div class="flex items-center justify-between">
+		<h1 class="text-2xl font-bold text-gray-900">Your account</h1>
+		<a href="/account/profile" class="text-sm font-medium text-emerald-700 underline"
+			>Edit profile</a
+		>
+	</div>
+	<p class="mt-1 text-sm text-gray-600">You're signed in.</p>
+
+	<dl class="mt-6 divide-y divide-gray-200 rounded-lg border border-gray-200">
+		<div class="flex justify-between px-4 py-3">
+			<dt class="text-sm font-medium text-gray-500">Name</dt>
+			<dd class="text-sm text-gray-900">{data.profile?.full_name ?? '—'}</dd>
+		</div>
+		<div class="flex justify-between px-4 py-3">
+			<dt class="text-sm font-medium text-gray-500">Email</dt>
+			<dd class="text-sm text-gray-900">{data.email}</dd>
+		</div>
+		<div class="flex justify-between px-4 py-3">
+			<dt class="text-sm font-medium text-gray-500">Phone</dt>
+			<dd class="text-sm text-gray-900">{data.profile?.phone ?? '—'}</dd>
+		</div>
+		<div class="flex justify-between px-4 py-3">
+			<dt class="text-sm font-medium text-gray-500">Role</dt>
+			<dd>
+				<span
+					class="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 capitalize"
+				>
+					{data.role ?? 'buyer'}
+				</span>
+			</dd>
+		</div>
+	</dl>
+
+	{#if data.role === 'buyer'}
+		<div class="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+			<p class="text-sm text-gray-700">Want to start selling?</p>
+			<a
+				href="/sell"
+				class="mt-2 inline-block rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+			>
+				Become a seller
+			</a>
+		</div>
+	{/if}
+</main>

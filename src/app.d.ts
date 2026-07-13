@@ -11,6 +11,11 @@ declare global {
 			safeGetSession: () => Promise<{ session: Session | null; user: User | null }>;
 			session: Session | null;
 			user: User | null;
+			/**
+			 * Request-scoped memo of the caller's profile role, populated lazily by
+			 * src/lib/server/guards.ts so nested group-layout guards share one query.
+			 */
+			roleCache?: Promise<Database['public']['Enums']['user_role'] | null>;
 		}
 		interface PageData {
 			session: Session | null;
