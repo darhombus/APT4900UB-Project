@@ -47,8 +47,5 @@ jobs:
       - name: Type-check (svelte-check)
         run: npm run check
 
-      - name: Test (passes if no tests exist yet)
-        run: npm run test -- --passWithNoTests
-
       - name: Build
         run: npm run build

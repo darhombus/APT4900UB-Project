@@ -513,6 +513,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      become_seller: {
+        Args: never
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
       is_admin: { Args: never; Returns: boolean }
       is_conversation_participant: {
         Args: { conv_id: string }
