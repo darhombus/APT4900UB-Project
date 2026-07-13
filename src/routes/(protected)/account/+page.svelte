@@ -29,9 +29,21 @@
 				<span
 					class="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 capitalize"
 				>
-					{data.profile?.role ?? 'buyer'}
+					{data.role ?? 'buyer'}
 				</span>
 			</dd>
 		</div>
 	</dl>
+
+	{#if data.role === 'buyer'}
+		<div class="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+			<p class="text-sm text-gray-700">Want to start selling?</p>
+			<a
+				href="/sell"
+				class="mt-2 inline-block rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+			>
+				Become a seller
+			</a>
+		</div>
+	{/if}
 </main>
