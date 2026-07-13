@@ -243,6 +243,20 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Custom email templates. These link to the app's /auth/confirm route with a
+# token_hash (not the default {{ .ConfirmationURL }}, which uses the PKCE `code`
+# flow and depends on a same-browser verifier cookie). token_hash + verifyOtp is
+# the cross-device SSR pattern our /auth/confirm route implements.
+# NOTE: the hosted project's email templates must be changed to match — see the
+# auth PRD Section 8 / deployment notes.
+[auth.email.template.confirmation]
+subject = "Confirm your Marketplace account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Marketplace password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
