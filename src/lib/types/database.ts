@@ -140,13 +140,15 @@ export type Database = {
       listings: {
         Row: {
           category_id: string
+          city: string
           condition: Database["public"]["Enums"]["item_condition"] | null
           created_at: string
           currency: string
           description: string
           id: string
-          location: string | null
+          location_area: string | null
           price: number
+          published_at: string | null
           quantity: number
           search_vector: unknown
           seller_id: string
@@ -157,13 +159,15 @@ export type Database = {
         }
         Insert: {
           category_id: string
+          city?: string
           condition?: Database["public"]["Enums"]["item_condition"] | null
           created_at?: string
           currency?: string
           description: string
           id?: string
-          location?: string | null
+          location_area?: string | null
           price: number
+          published_at?: string | null
           quantity?: number
           search_vector?: unknown
           seller_id: string
@@ -174,13 +178,15 @@ export type Database = {
         }
         Update: {
           category_id?: string
+          city?: string
           condition?: Database["public"]["Enums"]["item_condition"] | null
           created_at?: string
           currency?: string
           description?: string
           id?: string
-          location?: string | null
+          location_area?: string | null
           price?: number
+          published_at?: string | null
           quantity?: number
           search_vector?: unknown
           seller_id?: string
@@ -525,6 +531,7 @@ export type Database = {
         Args: { conv_id: string }
         Returns: boolean
       }
+      is_seller_or_admin: { Args: never; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
