@@ -1,5 +1,15 @@
 <script lang="ts">
-	import { Button, Input, Textarea, Select, Label, Card, Badge, Price } from '$lib/components/ui';
+	import {
+		Button,
+		Input,
+		Textarea,
+		Select,
+		Label,
+		Card,
+		Badge,
+		Price,
+		Alert
+	} from '$lib/components/ui';
 
 	let boundValue = $state('');
 
@@ -110,6 +120,15 @@
 				<Badge variant={s}><span class="capitalize">{s}</span></Badge>
 			{/each}
 		</div>
+	</section>
+
+	<!-- ── Alerts ──────────────────────────────────────────────────────────── -->
+	<section class="space-y-3">
+		<h2 class="font-display text-xl font-semibold text-ink">Alerts</h2>
+		<Alert variant="success">Profile saved.</Alert>
+		<Alert variant="error">That email or password didn't match.</Alert>
+		<Alert variant="warning">Your session has expired — please reset by email.</Alert>
+		<Alert variant="info">We sent a verification link to your inbox.</Alert>
 	</section>
 
 	<!-- ── Form controls ───────────────────────────────────────────────────── -->

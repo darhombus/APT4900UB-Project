@@ -13,9 +13,6 @@
 	let { session, supabase } = $derived(data);
 	const profile = $derived(data.profile);
 
-	let accountOpen = $state(false);
-	let mobileOpen = $state(false);
-
 	const year = new Date().getFullYear();
 
 	function initials(name: string | null | undefined): string {
@@ -28,17 +25,32 @@
 			.join('');
 	}
 
-	/** Close a menu when the user clicks anywhere outside `node`. */
-	function clickOutside(node: HTMLElement, onOutside: () => void) {
-		function handle(event: MouseEvent) {
-			if (!node.contains(event.target as Node)) onOutside();
+	/**
+	 * The header menus are native <details> disclosures, so they open/close with no
+	 * JavaScript — important on low-end Android and immune to hydration timing. This
+	 * action is pure progressive enhancement: when JS is available it closes an open
+	 * menu on an outside click or Escape.
+	 */
+	function autoClose(node: HTMLDetailsElement) {
+		function onDocClick(event: MouseEvent) {
+			if (node.open && !node.contains(event.target as Node)) node.open = false;
 		}
-		document.addEventListener('click', handle, true);
+		function onKey(event: KeyboardEvent) {
+			if (event.key === 'Escape') node.open = false;
+		}
+		document.addEventListener('click', onDocClick, true);
+		document.addEventListener('keydown', onKey);
 		return {
 			destroy() {
-				document.removeEventListener('click', handle, true);
+				document.removeEventListener('click', onDocClick, true);
+				document.removeEventListener('keydown', onKey);
 			}
 		};
+	}
+
+	/** Close the enclosing menu after a link click / form submit (SPA nav keeps it open). */
+	function closeMenu(event: Event) {
+		(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
 	}
 
 	const navLinks = [
@@ -70,15 +82,6 @@
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
-
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape') {
-			accountOpen = false;
-			mobileOpen = false;
-		}
-	}}
-/>
 
 {#snippet avatar(size: string)}
 	{#if profile?.avatar_url}
@@ -115,16 +118,18 @@
 			<!-- Account area (desktop) -->
 			<div class="hidden items-center gap-3 md:flex">
 				{#if session}
-					<div class="relative" use:clickOutside={() => (accountOpen = false)}>
-						<button
-							type="button"
-							onclick={() => (accountOpen = !accountOpen)}
-							aria-haspopup="menu"
-							aria-expanded={accountOpen}
-							class="flex items-center gap-2 rounded-pill p-0.5 pr-1 transition-colors hover:bg-page focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+					<details use:autoClose class="group relative">
+						<summary
+							aria-label="Account menu"
+							class="flex cursor-pointer list-none items-center gap-2 rounded-pill p-0.5 pr-1 transition-colors hover:bg-page focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none [&::-webkit-details-marker]:hidden"
 						>
 							{@render avatar('h-8 w-8')}
-							<svg class="h-4 w-4 text-subtle" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+							<svg
+								class="h-4 w-4 text-subtle transition-transform group-open:rotate-180"
+								viewBox="0 0 20 20"
+								fill="none"
+								aria-hidden="true"
+							>
 								<path
 									d="M6 8l4 4 4-4"
 									stroke="currentColor"
@@ -133,43 +138,18 @@
 									stroke-linejoin="round"
 								/>
 							</svg>
-						</button>
-						{#if accountOpen}
-							<div
-								role="menu"
-								tabindex="-1"
-								class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
-							>
-								<a
-									role="menuitem"
-									href="/account"
-									class={menuItem}
-									onclick={() => (accountOpen = false)}
-								>
-									Account
-								</a>
-								<a
-									role="menuitem"
-									href="/sell/listings"
-									class={menuItem}
-									onclick={() => (accountOpen = false)}
-								>
-									My listings
-								</a>
-								<div class="my-1 border-t border-border"></div>
-								<form
-									method="POST"
-									action="/logout"
-									use:enhance
-									onsubmit={() => (accountOpen = false)}
-								>
-									<button role="menuitem" type="submit" class={`${menuItem} w-full text-left`}>
-										Log out
-									</button>
-								</form>
-							</div>
-						{/if}
-					</div>
+						</summary>
+						<div
+							class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
+						>
+							<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
+							<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
+							<div class="my-1 border-t border-border"></div>
+							<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
+								<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
+							</form>
+						</div>
+					</details>
 				{:else}
 					<a
 						href="/login"
@@ -186,84 +166,78 @@
 				{/if}
 			</div>
 
-			<!-- Hamburger (mobile) -->
-			<button
-				type="button"
-				class="inline-flex h-10 w-10 items-center justify-center rounded-control text-ink transition-colors hover:bg-page md:hidden"
-				aria-label="Menu"
-				aria-expanded={mobileOpen}
-				aria-controls="mobile-menu"
-				onclick={() => (mobileOpen = !mobileOpen)}
-			>
-				<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-					{#if mobileOpen}
-						<path
-							d="M6 6l12 12M18 6L6 18"
-							stroke="currentColor"
-							stroke-width="1.8"
-							stroke-linecap="round"
-						/>
-					{:else}
+			<!-- Mobile menu (native disclosure) -->
+			<details use:autoClose class="group md:hidden">
+				<summary
+					aria-label="Menu"
+					class="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-control text-ink transition-colors hover:bg-page [&::-webkit-details-marker]:hidden"
+				>
+					<svg class="h-6 w-6 group-open:hidden" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<path
 							d="M4 7h16M4 12h16M4 17h16"
 							stroke="currentColor"
 							stroke-width="1.8"
 							stroke-linecap="round"
 						/>
-					{/if}
-				</svg>
-			</button>
-		</nav>
-
-		<!-- Mobile menu panel -->
-		{#if mobileOpen}
-			<div id="mobile-menu" class="border-t border-border bg-surface px-4 py-3 md:hidden">
-				<div class="flex flex-col gap-1">
-					{#each navLinks as link (link.href)}
-						<a href={link.href} class={menuItem} onclick={() => (mobileOpen = false)}
-							>{link.label}</a
-						>
-					{/each}
-				</div>
-				<div class="my-3 border-t border-border"></div>
-				{#if session}
-					<div class="flex items-center gap-3 px-1 pb-2">
-						{@render avatar('h-9 w-9')}
-						<div class="min-w-0">
+					</svg>
+					<svg
+						class="hidden h-6 w-6 group-open:block"
+						viewBox="0 0 24 24"
+						fill="none"
+						aria-hidden="true"
+					>
+						<path
+							d="M6 6l12 12M18 6L6 18"
+							stroke="currentColor"
+							stroke-width="1.8"
+							stroke-linecap="round"
+						/>
+					</svg>
+				</summary>
+				<div
+					class="absolute inset-x-0 top-full border-t border-border bg-surface px-4 py-3 shadow-menu"
+				>
+					<div class="flex flex-col gap-1">
+						{#each navLinks as link (link.href)}
+							<a href={link.href} class={menuItem} onclick={closeMenu}>{link.label}</a>
+						{/each}
+					</div>
+					<div class="my-3 border-t border-border"></div>
+					{#if session}
+						<div class="flex items-center gap-3 px-1 pb-2">
+							{@render avatar('h-9 w-9')}
 							<p class="truncate text-sm font-medium text-ink">
 								{profile?.full_name ?? 'Your account'}
 							</p>
 						</div>
-					</div>
-					<div class="flex flex-col gap-1">
-						<a href="/account" class={menuItem} onclick={() => (mobileOpen = false)}>Account</a>
-						<a href="/sell/listings" class={menuItem} onclick={() => (mobileOpen = false)}>
-							My listings
-						</a>
-						<form method="POST" action="/logout" use:enhance onsubmit={() => (mobileOpen = false)}>
-							<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
-						</form>
-					</div>
-				{:else}
-					<div class="flex flex-col gap-2">
-						<a
-							href="/login"
-							class="inline-flex h-11 items-center justify-center rounded-control border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-page"
-							onclick={() => (mobileOpen = false)}
-						>
-							Log in
-						</a>
-						<a
-							href="/signup"
-							class="inline-flex h-11 items-center justify-center rounded-control bg-brand px-4 text-sm font-medium text-white hover:bg-brand-hover"
-							onclick={() => (mobileOpen = false)}
-						>
-							Sign up
-						</a>
-					</div>
-				{/if}
-			</div>
-		{/if}
+						<div class="flex flex-col gap-1">
+							<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
+							<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
+							<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
+								<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
+							</form>
+						</div>
+					{:else}
+						<div class="flex flex-col gap-2">
+							<a
+								href="/login"
+								class="inline-flex h-11 items-center justify-center rounded-control border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-page"
+								onclick={closeMenu}
+							>
+								Log in
+							</a>
+							<a
+								href="/signup"
+								class="inline-flex h-11 items-center justify-center rounded-control bg-brand px-4 text-sm font-medium text-white hover:bg-brand-hover"
+								onclick={closeMenu}
+							>
+								Sign up
+							</a>
+						</div>
+					{/if}
+				</div>
+			</details>
+		</nav>
 	</header>
 
 	<div class="flex-1">
