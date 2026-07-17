@@ -110,3 +110,54 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
 	}
 	return out;
 }
+
+/** The Supabase auth error shape we read, kept structural so this stays pure/testable. */
+type AuthErrorLike = { message?: string | null; code?: string | null; status?: number | null };
+
+/** True when a raw error message is unfit to show a user (empty, or object/JSON-ish). */
+function isUnhelpfulMessage(message: string): boolean {
+	const m = message.trim();
+	return (
+		m === '' || m === '{}' || m === '[object Object]' || m.startsWith('{') || m.startsWith('[')
+	);
+}
+
+/**
+ * Turn a Supabase auth error into copy that is always safe to show a user.
+ * Supabase can return errors whose `.message` is empty or a non-human value — on
+ * the hosted stack an opaque error body surfaced as "{}" and rendered verbatim in
+ * the signup error box. This maps the common, actionable cases and, crucially,
+ * NEVER returns "{}" / "[object Object]" / a raw empty string: anything
+ * unrecognised falls back to a friendly generic.
+ */
+export function friendlyAuthError(error: AuthErrorLike): string {
+	const code = error.code ?? '';
+	const status = error.status ?? 0;
+
+	if (code === 'user_already_exists' || code === 'email_exists') {
+		return 'That email is already registered. Try logging in instead.';
+	}
+	if (code === 'weak_password') {
+		return 'Please choose a stronger password (at least 8 characters).';
+	}
+	if (
+		status === 429 ||
+		code === 'over_email_send_rate_limit' ||
+		code === 'over_request_rate_limit'
+	) {
+		return 'Too many attempts. Please wait a minute and try again.';
+	}
+	if (code === 'email_address_invalid') {
+		return 'That email address looks invalid. Please check it and try again.';
+	}
+	// 5xx / unexpected failures are typically email-delivery or server-side issues,
+	// not something the user typed wrong.
+	if (status >= 500 || code === 'unexpected_failure' || code === 'email_send_failed') {
+		return "We couldn't send your verification email just now — please try again shortly.";
+	}
+
+	const message = (error.message ?? '').trim();
+	return isUnhelpfulMessage(message)
+		? 'Something went wrong creating your account. Please try again.'
+		: message;
+}
