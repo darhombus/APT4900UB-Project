@@ -20,6 +20,10 @@ export const load: LayoutServerLoad = async ({ locals: { session, user, supabase
 
 	return {
 		session,
+		// Forward the server-validated user (from safeGetSession -> getUser in
+		// hooks.server.ts) so the client can render the initial auth state without
+		// re-fetching it and racing the cookie. safeGetSession itself is unchanged.
+		user,
 		profile,
 		cookies: cookies.getAll()
 	};

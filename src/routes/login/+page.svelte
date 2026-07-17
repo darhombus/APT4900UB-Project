@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
+	import { AuthCard } from '$lib/components';
+	import { Alert, Button, Input, Label } from '$lib/components/ui';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -12,84 +14,72 @@
 	const redirectTo = $derived(page.url.searchParams.get('redirectTo') ?? '');
 </script>
 
-<svelte:head><title>Log in · Marketplace</title></svelte:head>
+<svelte:head><title>Log in · MySoko</title></svelte:head>
 
-<main class="mx-auto flex min-h-[80vh] max-w-md flex-col justify-center px-4 py-10">
-	<h1 class="text-2xl font-bold text-gray-900">Log in</h1>
-	<p class="mt-1 text-sm text-gray-600">Welcome back.</p>
-
+<AuthCard title="Log in" subtitle="Welcome back.">
 	{#if page.url.searchParams.get('error') === 'verification_failed'}
-		<div class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+		<Alert variant="warning" class="mb-4">
 			That verification link was invalid or has expired. Log in to request a new one.
-		</div>
+		</Alert>
 	{/if}
 
 	{#if form && 'formError' in form && form.formError}
-		<div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-			{form.formError}
-		</div>
+		<Alert variant="error" class="mb-4">{form.formError}</Alert>
 	{/if}
 
 	{#if form && 'resent' in form && form.resent}
-		<div
-			class="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
-		>
+		<Alert variant="success" class="mb-4">
 			If that account needs verifying, we've sent a fresh link to {form.email}.
-		</div>
+		</Alert>
 	{/if}
 
-	<form method="POST" action="?/login" use:enhance class="mt-6 space-y-4">
+	<form method="POST" action="?/login" use:enhance class="space-y-4">
 		<input type="hidden" name="redirectTo" value={redirectTo} />
 		<div>
-			<label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-			<input
+			<Label for="email">Email</Label>
+			<Input
 				id="email"
 				name="email"
 				type="email"
 				autocomplete="email"
 				value={emailValue}
-				class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+				error={errors.email}
 			/>
-			{#if errors.email}<p class="mt-1 text-sm text-red-600">{errors.email}</p>{/if}
 		</div>
 
 		<div>
-			<div class="flex items-center justify-between">
-				<label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-				<a href="/forgot-password" class="text-sm text-emerald-700 underline">Forgot password?</a>
+			<div class="mb-1 flex items-center justify-between">
+				<Label for="password" class="mb-0">Password</Label>
+				<a href="/forgot-password" class="text-sm font-medium text-brand hover:underline">
+					Forgot password?
+				</a>
 			</div>
-			<input
+			<Input
 				id="password"
 				name="password"
 				type="password"
 				autocomplete="current-password"
-				class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+				error={errors.password}
 			/>
-			{#if errors.password}<p class="mt-1 text-sm text-red-600">{errors.password}</p>{/if}
 		</div>
 
-		<button
-			type="submit"
-			class="w-full rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-		>
-			Log in
-		</button>
+		<Button type="submit" class="w-full">Log in</Button>
 	</form>
 
 	{#if unverified}
 		<form method="POST" action="?/resend" use:enhance class="mt-3">
 			<input type="hidden" name="email" value={emailValue} />
-			<button type="submit" class="text-sm font-medium text-emerald-700 underline">
+			<button type="submit" class="text-sm font-medium text-brand hover:underline">
 				Resend verification email
 			</button>
 			{#if form && 'resendError' in form && form.resendError}
-				<p class="mt-1 text-sm text-red-600">{form.resendError}</p>
+				<p class="mt-1 text-sm text-error">{form.resendError}</p>
 			{/if}
 		</form>
 	{/if}
 
-	<p class="mt-4 text-center text-sm text-gray-600">
+	<p class="mt-4 text-center text-sm text-muted">
 		Don't have an account?
-		<a href="/signup" class="font-medium text-emerald-700 underline">Sign up</a>
+		<a href="/signup" class="font-medium text-brand hover:underline">Sign up</a>
 	</p>
-</main>
+</AuthCard>

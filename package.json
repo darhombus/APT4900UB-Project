@@ -42,6 +42,8 @@
 		"vitest": "^4.1.8"
 	},
 	"dependencies": {
+		"@fontsource-variable/inter": "^5.2.8",
+		"@fontsource-variable/space-grotesk": "^5.2.10",
 		"@supabase/ssr": "^0.12.0",
 		"@supabase/supabase-js": "^2.110.2",
 		"zod": "^4.4.3"
