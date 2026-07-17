@@ -5,6 +5,10 @@
 	import '@fontsource-variable/inter';
 	import '@fontsource-variable/space-grotesk';
 	import favicon from '$lib/assets/favicon.svg';
+	// Import the component directly (not via the $lib/components barrel) so the root
+	// layout — loaded on every page — doesn't pull the heavy ListingForm/
+	// ImageUploader into its client bundle and slow hydration.
+	import SearchBar from '$lib/components/SearchBar.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -115,6 +119,9 @@
 				{/each}
 			</div>
 
+			<!-- Search (desktop) -->
+			<SearchBar compact class="hidden md:flex md:max-w-xs md:flex-1" />
+
 			<!-- Account area (desktop) -->
 			<div class="hidden items-center gap-3 md:flex">
 				{#if session}
@@ -197,6 +204,7 @@
 				<div
 					class="absolute inset-x-0 top-full border-t border-border bg-surface px-4 py-3 shadow-menu"
 				>
+					<SearchBar class="mb-3" />
 					<div class="flex flex-col gap-1">
 						{#each navLinks as link (link.href)}
 							<a href={link.href} class={menuItem} onclick={closeMenu}>{link.label}</a>

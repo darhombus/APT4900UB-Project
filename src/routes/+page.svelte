@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ListingCard } from '$lib/components';
+	import { ListingCard, SearchBar } from '$lib/components';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -31,37 +31,7 @@
 			minutes.
 		</p>
 
-		<form action="/search" method="GET" role="search" class="mt-5 flex max-w-xl gap-2">
-			<div class="relative flex-1">
-				<svg
-					class="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-subtle"
-					viewBox="0 0 20 20"
-					fill="none"
-					aria-hidden="true"
-				>
-					<circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.6" />
-					<path
-						d="M17 17l-3.5-3.5"
-						stroke="currentColor"
-						stroke-width="1.6"
-						stroke-linecap="round"
-					/>
-				</svg>
-				<input
-					type="search"
-					name="q"
-					placeholder="Search listings…"
-					aria-label="Search listings"
-					class="h-11 w-full rounded-control border border-border bg-surface pr-3 pl-10 text-sm text-ink placeholder:text-subtle focus:border-brand focus:ring-2 focus:ring-brand/30 focus:outline-none"
-				/>
-			</div>
-			<button
-				type="submit"
-				class="inline-flex h-11 flex-none items-center justify-center rounded-control bg-brand px-5 text-sm font-medium text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
-			>
-				Search
-			</button>
-		</form>
+		<SearchBar class="mt-5 max-w-xl" />
 	</section>
 
 	<!-- Category entry points -->
