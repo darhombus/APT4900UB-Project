@@ -13,6 +13,7 @@
 		{ key: 'all', label: 'All', count: data.counts.all },
 		{ key: 'draft', label: 'Draft', count: data.counts.draft },
 		{ key: 'active', label: 'Active', count: data.counts.active },
+		{ key: 'paused', label: 'Paused', count: data.counts.paused },
 		{ key: 'sold', label: 'Sold', count: data.counts.sold }
 	] as const);
 
@@ -109,6 +110,14 @@
 				disabled={!!pending}
 			>
 				Unpublish
+			</Button>
+		</form>
+		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>
+	{:else if l.status === 'paused'}
+		<form method="POST" action="?/republish" use:enhance={act('republish', l.id)}>
+			<input type="hidden" name="id" value={l.id} />
+			<Button type="submit" size="sm" loading={isPending(l.id, 'republish')} disabled={!!pending}>
+				Republish
 			</Button>
 		</form>
 		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>

@@ -8,10 +8,14 @@ import {
 	findSubcategory,
 	isServiceTop,
 	listingTypeForTop,
-	type CategoryTree
+	planTransition,
+	type CategoryTree,
+	type ListingTransition
 } from '$lib/validation/listings';
 import { LISTING_IMAGES_BUCKET } from '$lib/listing-images';
 import type { Database } from '$lib/types/database';
+
+export type { ListingTransition } from '$lib/validation/listings';
 
 type ListingStatus = Database['public']['Enums']['listing_status'];
 type ItemCondition = Database['public']['Enums']['item_condition'];
@@ -197,36 +201,28 @@ export async function saveListingAction(
 // ─────────────────────────────────────────────────────────────────────────────
 // Status transitions (Section 8 management view)
 //
-// The lifecycle is a small state machine. Every transition is gated on the row's
-// CURRENT stored status (never the client's view), so a stale tab or a forged
-// POST can't drive an illegal move. `removed` is reserved for admin moderation
-// and is intentionally not reachable from here.
+// The lifecycle (confirmed decisions block, ruling #5) is a small state machine —
+// `planTransition()` in the validation module owns the rules. Every move is gated
+// on the row's CURRENT stored status here (never the client's view), so a stale
+// tab or a forged POST can't drive an illegal transition. `removed` is reserved
+// for admin moderation and isn't reachable from here.
 //
-//   draft  ──Publish──▶  active        (full publish validation; stamps
-//                                        published_at on the first publish only)
+//   draft  ──Publish───▶ active   (full publish validation; first publish
+//                                   stamps published_at)
+//   active ──Unpublish─▶ paused   (published_at preserved)
+//   paused ──Republish─▶ active   (published_at preserved — NOT refreshed)
 //   active ──Mark sold─▶ sold
-//   active ─Unpublish──▶ draft
-//   sold   ──Relist────▶ active        (re-stamps published_at = now())
-//   draft  ──Delete────▶ (gone)        (hard delete; RLS allows it only for
-//                                        drafts; storage objects removed too)
+//   sold   ──Relist────▶ active   (published_at re-stamped to now())
+//   draft  ──Delete────▶ (gone)   (hard delete; RLS allows it only for drafts;
+//                                   storage objects removed too)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export type ListingTransition = 'publish' | 'markSold' | 'unpublish' | 'relist' | 'delete';
-
-/** The status a listing must currently be in for each transition to be legal. */
-const TRANSITION_FROM: Record<ListingTransition, ListingStatus> = {
-	publish: 'draft',
-	markSold: 'active',
-	unpublish: 'active',
-	relist: 'sold',
-	delete: 'draft'
-};
 
 /** Past-tense verb for the "can no longer be …" conflict message. */
 const TRANSITION_VERB: Record<ListingTransition, string> = {
 	publish: 'published',
-	markSold: 'marked as sold',
 	unpublish: 'unpublished',
+	republish: 'republished',
+	markSold: 'marked as sold',
 	relist: 'relisted',
 	delete: 'deleted'
 };
@@ -234,8 +230,9 @@ const TRANSITION_VERB: Record<ListingTransition, string> = {
 /** Confirmation message shown after a successful transition. */
 const TRANSITION_DONE: Record<ListingTransition, string> = {
 	publish: 'Listing published.',
+	unpublish: 'Listing unpublished — buyers can’t see it now.',
+	republish: 'Listing republished.',
 	markSold: 'Marked as sold.',
-	unpublish: 'Listing unpublished — it’s a draft again.',
 	relist: 'Listing relisted.',
 	delete: 'Listing deleted.'
 };
@@ -307,8 +304,9 @@ export async function transitionListing(
 
 	if (!listing || listing.seller_id !== user!.id) error(404, 'Not found');
 
-	const requiredFrom = TRANSITION_FROM[transition];
-	if (listing.status !== requiredFrom) {
+	// Legality is decided purely from the CURRENT stored status.
+	const plan = planTransition(transition, listing.status);
+	if (!plan) {
 		return fail(409, {
 			id: listingId,
 			transitionError: `This listing can no longer be ${TRANSITION_VERB[transition]} — it’s ${listing.status} now.`
@@ -349,31 +347,19 @@ export async function transitionListing(
 				transitionError: 'This listing isn’t ready to publish yet.'
 			});
 		}
-		const patch: Database['public']['Tables']['listings']['Update'] = { status: 'active' };
-		if (!listing.published_at) patch.published_at = new Date().toISOString();
-		const { error: updErr } = await supabase
-			.from('listings')
-			.update(patch)
-			.eq('id', listing.id)
-			.eq('status', 'draft');
-		if (updErr)
-			return fail(500, { id: listingId, transitionError: 'Could not publish the listing.' });
-		return { success: true, id: listingId, message: TRANSITION_DONE.publish };
 	}
 
-	// markSold / unpublish / relist — simple status moves.
-	const patch: Database['public']['Tables']['listings']['Update'] =
-		transition === 'markSold'
-			? { status: 'sold' }
-			: transition === 'unpublish'
-				? { status: 'draft' }
-				: { status: 'active', published_at: new Date().toISOString() }; // relist
-
+	const patch: Database['public']['Tables']['listings']['Update'] = { status: plan.to };
+	if (plan.publishedAt === 'now' || (plan.publishedAt === 'first' && !listing.published_at)) {
+		patch.published_at = new Date().toISOString();
+	}
+	// Re-guard the from-status atomically at write time (defends against a race
+	// with another tab).
 	const { error: updErr } = await supabase
 		.from('listings')
 		.update(patch)
 		.eq('id', listing.id)
-		.eq('status', requiredFrom);
+		.eq('status', listing.status);
 	if (updErr) return fail(500, { id: listingId, transitionError: 'Could not update the listing.' });
 	return { success: true, id: listingId, message: TRANSITION_DONE[transition] };
 }

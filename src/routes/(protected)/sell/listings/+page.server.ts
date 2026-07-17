@@ -2,7 +2,7 @@ import { getCoverUrl } from '$lib/listing-images';
 import { transitionListing, type ListingTransition } from '$lib/server/listings';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
-const TABS = ['all', 'draft', 'active', 'sold'] as const;
+const TABS = ['all', 'draft', 'active', 'paused', 'sold'] as const;
 type Tab = (typeof TABS)[number];
 
 // The /sell group layout already restricts this route to sellers/admins.
@@ -20,6 +20,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, user } }) 
 		all: listings.length,
 		draft: listings.filter((l) => l.status === 'draft').length,
 		active: listings.filter((l) => l.status === 'active').length,
+		paused: listings.filter((l) => l.status === 'paused').length,
 		sold: listings.filter((l) => l.status === 'sold').length
 	};
 
@@ -48,8 +49,9 @@ const run = async (event: RequestEvent, transition: ListingTransition) => {
 
 export const actions: Actions = {
 	publish: (event) => run(event, 'publish'),
-	markSold: (event) => run(event, 'markSold'),
 	unpublish: (event) => run(event, 'unpublish'),
+	republish: (event) => run(event, 'republish'),
+	markSold: (event) => run(event, 'markSold'),
 	relist: (event) => run(event, 'relist'),
 	delete: (event) => run(event, 'delete')
 };

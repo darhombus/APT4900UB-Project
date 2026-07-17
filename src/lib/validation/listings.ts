@@ -170,3 +170,61 @@ export const publishListingSchema = draftListingSchema.extend({
 });
 
 export type DraftListingInput = z.infer<typeof draftListingSchema>;
+
+// ── Listing lifecycle (Section 8) ────────────────────────────────────────────
+// The confirmed decisions block (ruling #5) governs this, over the PRD's Section 8
+// prompt text. `paused` is the Unpublish state; a listing that has ever been
+// published never returns to draft; `removed` is admin-only (no transition here).
+
+export type ListingStatus = 'draft' | 'active' | 'paused' | 'sold' | 'removed';
+export type ListingTransition =
+	'publish' | 'unpublish' | 'republish' | 'markSold' | 'relist' | 'delete';
+
+/**
+ * How a transition touches published_at:
+ *   'first'    — stamp now() only if it was never set (the first publish)
+ *   'now'      — (re)stamp now() (Relist)
+ *   'preserve' — leave it untouched (Unpublish / Republish / Mark as sold)
+ */
+export type PublishedAtRule = 'first' | 'now' | 'preserve';
+
+interface TransitionRule {
+	from: ListingStatus;
+	to: ListingStatus;
+	publishedAt: PublishedAtRule;
+}
+
+/**
+ * The listing lifecycle as a state machine:
+ *   draft  ──Publish───▶ active   (first publish stamps published_at)
+ *   active ──Unpublish─▶ paused   (published_at preserved)
+ *   paused ──Republish─▶ active   (published_at preserved — NOT refreshed)
+ *   active ──Mark sold─▶ sold
+ *   sold   ──Relist────▶ active   (published_at re-stamped to now())
+ *   draft  ──Delete────▶ (gone)   (only a still-draft listing can be deleted)
+ * There is deliberately no active→draft or paused→draft: once published, a
+ * listing can't go back to draft.
+ */
+export const LISTING_TRANSITIONS: Record<ListingTransition, TransitionRule> = {
+	publish: { from: 'draft', to: 'active', publishedAt: 'first' },
+	unpublish: { from: 'active', to: 'paused', publishedAt: 'preserve' },
+	republish: { from: 'paused', to: 'active', publishedAt: 'preserve' },
+	markSold: { from: 'active', to: 'sold', publishedAt: 'preserve' },
+	relist: { from: 'sold', to: 'active', publishedAt: 'now' },
+	// `to` is unused for delete (the row is removed); `from` gates its legality.
+	delete: { from: 'draft', to: 'draft', publishedAt: 'preserve' }
+};
+
+/**
+ * Pure legality check: the resulting status + published_at rule when the
+ * transition is legal from `currentStatus`, else null. The server helper trusts
+ * this — never the client's view of the current status.
+ */
+export function planTransition(
+	transition: ListingTransition,
+	currentStatus: ListingStatus
+): { to: ListingStatus; publishedAt: PublishedAtRule } | null {
+	const rule = LISTING_TRANSITIONS[transition];
+	if (currentStatus !== rule.from) return null;
+	return { to: rule.to, publishedAt: rule.publishedAt };
+}
