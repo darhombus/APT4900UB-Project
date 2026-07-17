@@ -176,6 +176,25 @@ export const publishListingSchema = draftListingSchema.extend({
 
 export type DraftListingInput = z.infer<typeof draftListingSchema>;
 
+/**
+ * Publish-time rules that depend on the listing's derived type rather than on zod:
+ * a goods listing needs a condition AND at least one photo; a service is exempt
+ * from both (and stores a null condition). Pure, so the action can rely on it and
+ * it's unit-tested. Returns the field errors — `{}` means ready to publish.
+ */
+export function publishGoodsErrors(input: {
+	isService: boolean;
+	condition: ConditionValue | null;
+	imageCount: number;
+}): { condition?: string; images?: string } {
+	const errors: { condition?: string; images?: string } = {};
+	if (!input.isService) {
+		if (!input.condition) errors.condition = 'Choose the item condition';
+		if (input.imageCount < 1) errors.images = 'Add at least one photo before publishing.';
+	}
+	return errors;
+}
+
 // ── Listing lifecycle (Section 8) ────────────────────────────────────────────
 // The confirmed decisions block (ruling #5) governs this, over the PRD's Section 8
 // prompt text. `paused` is the Unpublish state; a listing that has ever been

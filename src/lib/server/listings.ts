@@ -9,6 +9,7 @@ import {
 	isServiceTop,
 	listingTypeForTop,
 	planTransition,
+	publishGoodsErrors,
 	type CategoryTree,
 	type ListingTransition
 } from '$lib/validation/listings';
@@ -100,35 +101,28 @@ export async function saveListingAction(
 
 	const service = match ? isServiceTop(match.top) : false;
 
-	// Condition is forced null for services and required for goods only at publish.
-	let condition: ItemCondition | null = null;
-	if (match && !service) {
-		condition = parsed.success ? (parsed.data.condition ?? null) : null;
-		if (intent === 'publish' && !condition) errors.condition ??= 'Choose the item condition';
+	// Services store a null condition; goods keep the chosen value.
+	const condition: ItemCondition | null =
+		match && !service && parsed.success ? (parsed.data.condition ?? null) : null;
+
+	// Publish rules for goods (a condition and at least one photo); services are
+	// exempt. The rule itself lives in publishGoodsErrors() so it's unit-tested.
+	if (intent === 'publish' && match) {
+		let imageCount = 0;
+		if (!service && existing) {
+			const { count } = await supabase
+				.from('listing_images')
+				.select('id', { count: 'exact', head: true })
+				.eq('listing_id', existing.id);
+			imageCount = count ?? 0;
+		}
+		Object.assign(errors, publishGoodsErrors({ isService: service, condition, imageCount }));
 	}
 
 	if (!parsed.success || !match || Object.keys(errors).length > 0) {
 		return fail(400, { errors, values: raw });
 	}
 	const data = parsed.data;
-
-	// Publish rule: goods need at least one stored photo; services are exempt.
-	if (intent === 'publish' && !service) {
-		let count = 0;
-		if (existing) {
-			const { count: c } = await supabase
-				.from('listing_images')
-				.select('id', { count: 'exact', head: true })
-				.eq('listing_id', existing.id);
-			count = c ?? 0;
-		}
-		if (count < 1) {
-			return fail(400, {
-				errors: { images: 'Add at least one photo before publishing.' },
-				values: raw
-			});
-		}
-	}
 
 	const payload = {
 		title: data.title,
