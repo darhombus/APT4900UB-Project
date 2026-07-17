@@ -189,30 +189,32 @@ export type ListingTransition =
 export type PublishedAtRule = 'first' | 'now' | 'preserve';
 
 interface TransitionRule {
-	from: ListingStatus;
+	/** The status(es) a listing may be in for this transition to be legal. */
+	from: readonly ListingStatus[];
 	to: ListingStatus;
 	publishedAt: PublishedAtRule;
 }
 
 /**
  * The listing lifecycle as a state machine:
- *   draft  ──Publish───▶ active   (first publish stamps published_at)
- *   active ──Unpublish─▶ paused   (published_at preserved)
- *   paused ──Republish─▶ active   (published_at preserved — NOT refreshed)
- *   active ──Mark sold─▶ sold
- *   sold   ──Relist────▶ active   (published_at re-stamped to now())
- *   draft  ──Delete────▶ (gone)   (only a still-draft listing can be deleted)
+ *   draft         ──Publish───▶ active   (first publish stamps published_at)
+ *   active        ──Unpublish─▶ paused   (published_at preserved)
+ *   paused        ──Republish─▶ active   (published_at preserved — NOT refreshed)
+ *   active/paused ──Mark sold─▶ sold     (a paused listing can be closed out
+ *                                          directly, without going public again)
+ *   sold          ──Relist────▶ active   (published_at re-stamped to now())
+ *   draft         ──Delete────▶ (gone)   (only a still-draft listing can be deleted)
  * There is deliberately no active→draft or paused→draft: once published, a
  * listing can't go back to draft.
  */
 export const LISTING_TRANSITIONS: Record<ListingTransition, TransitionRule> = {
-	publish: { from: 'draft', to: 'active', publishedAt: 'first' },
-	unpublish: { from: 'active', to: 'paused', publishedAt: 'preserve' },
-	republish: { from: 'paused', to: 'active', publishedAt: 'preserve' },
-	markSold: { from: 'active', to: 'sold', publishedAt: 'preserve' },
-	relist: { from: 'sold', to: 'active', publishedAt: 'now' },
+	publish: { from: ['draft'], to: 'active', publishedAt: 'first' },
+	unpublish: { from: ['active'], to: 'paused', publishedAt: 'preserve' },
+	republish: { from: ['paused'], to: 'active', publishedAt: 'preserve' },
+	markSold: { from: ['active', 'paused'], to: 'sold', publishedAt: 'preserve' },
+	relist: { from: ['sold'], to: 'active', publishedAt: 'now' },
 	// `to` is unused for delete (the row is removed); `from` gates its legality.
-	delete: { from: 'draft', to: 'draft', publishedAt: 'preserve' }
+	delete: { from: ['draft'], to: 'draft', publishedAt: 'preserve' }
 };
 
 /**
@@ -225,6 +227,6 @@ export function planTransition(
 	currentStatus: ListingStatus
 ): { to: ListingStatus; publishedAt: PublishedAtRule } | null {
 	const rule = LISTING_TRANSITIONS[transition];
-	if (currentStatus !== rule.from) return null;
+	if (!rule.from.includes(currentStatus)) return null;
 	return { to: rule.to, publishedAt: rule.publishedAt };
 }

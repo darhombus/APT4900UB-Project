@@ -120,6 +120,18 @@
 				Republish
 			</Button>
 		</form>
+		<form method="POST" action="?/markSold" use:enhance={act('markSold', l.id)}>
+			<input type="hidden" name="id" value={l.id} />
+			<Button
+				type="submit"
+				size="sm"
+				variant="secondary"
+				loading={isPending(l.id, 'markSold')}
+				disabled={!!pending}
+			>
+				Mark as sold
+			</Button>
+		</form>
 		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>
 	{:else if l.status === 'sold'}
 		<form method="POST" action="?/relist" use:enhance={act('relist', l.id)}>
