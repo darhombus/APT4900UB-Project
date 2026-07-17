@@ -41,6 +41,7 @@ export type Database = {
           name: string
           parent_id: string | null
           slug: string
+          sort_order: number
         }
         Insert: {
           created_at?: string
@@ -48,6 +49,7 @@ export type Database = {
           name: string
           parent_id?: string | null
           slug: string
+          sort_order?: number
         }
         Update: {
           created_at?: string
@@ -55,6 +57,7 @@ export type Database = {
           name?: string
           parent_id?: string | null
           slug?: string
+          sort_order?: number
         }
         Relationships: [
           {
@@ -137,13 +140,15 @@ export type Database = {
       listings: {
         Row: {
           category_id: string
+          city: string
           condition: Database["public"]["Enums"]["item_condition"] | null
           created_at: string
           currency: string
           description: string
           id: string
-          location: string | null
+          location_area: string | null
           price: number
+          published_at: string | null
           quantity: number
           search_vector: unknown
           seller_id: string
@@ -154,13 +159,15 @@ export type Database = {
         }
         Insert: {
           category_id: string
+          city?: string
           condition?: Database["public"]["Enums"]["item_condition"] | null
           created_at?: string
           currency?: string
           description: string
           id?: string
-          location?: string | null
+          location_area?: string | null
           price: number
+          published_at?: string | null
           quantity?: number
           search_vector?: unknown
           seller_id: string
@@ -171,13 +178,15 @@ export type Database = {
         }
         Update: {
           category_id?: string
+          city?: string
           condition?: Database["public"]["Enums"]["item_condition"] | null
           created_at?: string
           currency?: string
           description?: string
           id?: string
-          location?: string | null
+          location_area?: string | null
           price?: number
+          published_at?: string | null
           quantity?: number
           search_vector?: unknown
           seller_id?: string
@@ -521,6 +530,42 @@ export type Database = {
       is_conversation_participant: {
         Args: { conv_id: string }
         Returns: boolean
+      }
+      is_seller_or_admin: { Args: never; Returns: boolean }
+      search_listings: {
+        Args: {
+          category_ids?: string[]
+          conditions?: Database["public"]["Enums"]["item_condition"][]
+          max_price?: number
+          min_price?: number
+          q?: string
+          sort?: string
+        }
+        Returns: {
+          category_id: string
+          city: string
+          condition: Database["public"]["Enums"]["item_condition"] | null
+          created_at: string
+          currency: string
+          description: string
+          id: string
+          location_area: string | null
+          price: number
+          published_at: string | null
+          quantity: number
+          search_vector: unknown
+          seller_id: string
+          status: Database["public"]["Enums"]["listing_status"]
+          title: string
+          type: Database["public"]["Enums"]["listing_type"]
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "listings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

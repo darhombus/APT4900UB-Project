@@ -4,10 +4,19 @@ import type { LayoutLoad } from './$types';
 import type { Database } from '$lib/types/database';
 
 /**
- * Universal load: creates the Supabase client used by the app. In the browser
- * it's a cookie-less browser client; during SSR it's a server client seeded with
- * the cookies forwarded from +layout.server.ts. `depends('supabase:auth')` lets
- * us invalidate on auth changes.
+ * Universal load: creates the Supabase client used by the app and forwards the
+ * server-validated auth state.
+ *
+ * The `session` and `user` come straight from `+layout.server.ts` (populated by
+ * `safeGetSession()` -> `getUser()` in hooks.server.ts). We deliberately do NOT
+ * call the browser client's `getSession()`/`getUser()` here: right after a
+ * full-page-load login the freshly-set auth cookie hasn't settled, so the browser
+ * `getSession()` transiently returns null. That made the client's first render
+ * disagree with SSR (server logged-in, client logged-out) and Svelte bailed
+ * hydration on logged-in pages, leaving event handlers unwired. Trusting the
+ * server-validated `data` makes both renders agree; the `onAuthStateChange`
+ * subscription in the root layout + `invalidate('supabase:auth')` (declared here)
+ * keep the client in sync as the session subsequently changes.
  */
 export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 	depends('supabase:auth');
@@ -23,15 +32,10 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 				}
 			});
 
-	const {
-		data: { session }
-	} = await supabase.auth.getSession();
-
-	const {
-		data: { user }
-	} = await supabase.auth.getUser();
-
-	// Forward the server-loaded header profile (avatar + name) so the layout can
-	// render it. `data` is null-safe: it's undefined only before the server load runs.
-	return { supabase, session, user, profile: data?.profile ?? null };
+	return {
+		supabase,
+		session: data.session,
+		user: data.user,
+		profile: data?.profile ?? null
+	};
 };

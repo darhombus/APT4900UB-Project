@@ -42,5 +42,26 @@ export default defineConfig(
 			// requirement to keep links readable; re-enable if a base path is added.
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// Layouts load on every page in their subtree (the root layout on ALL pages).
+		// Importing the `$lib/components` barrel here drags every re-exported component
+		// (ListingForm, ImageUploader, …) into that always-loaded bundle and slows
+		// hydration — the Section 10 regression. Import components DIRECTLY in layouts.
+		files: ['src/routes/**/+layout.svelte', 'src/routes/**/+layout.{ts,js}'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					paths: [
+						{
+							name: '$lib/components',
+							message:
+								'Import components directly in layouts (e.g. $lib/components/SearchBar.svelte) to keep the every-page bundle lean.'
+						}
+					]
+				}
+			]
+		}
 	}
 );
