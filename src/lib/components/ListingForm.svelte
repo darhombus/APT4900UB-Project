@@ -121,11 +121,17 @@
 		if (id && !listingId) listingId = id;
 	});
 
-	function onTopChange() {
-		const top = categoryTree.find((t) => t.id === selectedTopId) ?? null;
-		if (!top || !top.children.some((c) => c.id === selectedSubId)) selectedSubId = '';
-		if (top && isServiceTop(top)) condition = '';
-	}
+	// Keep the two-step category selects in sync reactively: when the top-level
+	// changes, drop a subcategory that no longer belongs to it. Done as an effect
+	// rather than an `onchange` handler — a handler spread onto a `bind:value`
+	// <select> clobbers the binding's own change listener, so the bound value
+	// would never update.
+	$effect(() => {
+		const validIds = subOptions.map((c) => c.id);
+		untrack(() => {
+			if (selectedSubId && !validIds.includes(selectedSubId)) selectedSubId = '';
+		});
+	});
 
 	function onPriceBlur() {
 		priceDisplay = formatThousands(priceDisplay);
@@ -187,7 +193,7 @@
 			<div class="grid gap-4 sm:grid-cols-2">
 				<div>
 					<Label for="category-top">Category</Label>
-					<Select id="category-top" bind:value={selectedTopId} onchange={onTopChange}>
+					<Select id="category-top" bind:value={selectedTopId}>
 						<option value="">Choose a category</option>
 						{#each categoryTree as top (top.id)}
 							<option value={top.id}>{top.name}</option>
