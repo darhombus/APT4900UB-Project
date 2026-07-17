@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { signupSchema, fieldErrors } from '$lib/validation/auth';
+import { signupSchema, fieldErrors, friendlyAuthError } from '$lib/validation/auth';
 import type { Actions, PageServerLoad } from './$types';
 
 // Abuse protection (signup flooding, credential stuffing) is intentionally NOT
@@ -42,8 +42,10 @@ export const actions: Actions = {
 		});
 
 		if (error) {
+			// Map to safe copy — Supabase's raw message can be empty/opaque (surfaced
+			// as "{}" on the hosted stack), which must never hit the UI.
 			return fail(400, {
-				formError: error.message,
+				formError: friendlyAuthError(error),
 				values: { fullName, email, phone }
 			});
 		}
