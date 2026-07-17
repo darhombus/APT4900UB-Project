@@ -33,6 +33,11 @@ export type ConditionValue = (typeof CONDITIONS)[number]['value'];
 
 const CONDITION_VALUES = CONDITIONS.map((c) => c.value) as [ConditionValue, ...ConditionValue[]];
 
+/** Display label for a stored condition value ("used_good" → "Used — good"). */
+export function conditionLabel(value: string): string {
+	return CONDITIONS.find((c) => c.value === value)?.label ?? value;
+}
+
 /** Common Nairobi areas offered as a datalist on the free-text location field. */
 export const NAIROBI_AREAS = [
 	'Westlands',
