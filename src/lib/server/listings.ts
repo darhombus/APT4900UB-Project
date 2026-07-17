@@ -10,6 +10,7 @@ import {
 	listingTypeForTop,
 	type CategoryTree
 } from '$lib/validation/listings';
+import { LISTING_IMAGES_BUCKET } from '$lib/listing-images';
 import type { Database } from '$lib/types/database';
 
 type ListingStatus = Database['public']['Enums']['listing_status'];
@@ -191,4 +192,188 @@ export async function saveListingAction(
 	// A draft (or preserved paused/sold) save stays on the form so the seller can
 	// keep working — e.g. add photos to a freshly-created draft.
 	return { success: true, id, status: nextStatus } as const;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status transitions (Section 8 management view)
+//
+// The lifecycle is a small state machine. Every transition is gated on the row's
+// CURRENT stored status (never the client's view), so a stale tab or a forged
+// POST can't drive an illegal move. `removed` is reserved for admin moderation
+// and is intentionally not reachable from here.
+//
+//   draft  ──Publish──▶  active        (full publish validation; stamps
+//                                        published_at on the first publish only)
+//   active ──Mark sold─▶ sold
+//   active ─Unpublish──▶ draft
+//   sold   ──Relist────▶ active        (re-stamps published_at = now())
+//   draft  ──Delete────▶ (gone)        (hard delete; RLS allows it only for
+//                                        drafts; storage objects removed too)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ListingTransition = 'publish' | 'markSold' | 'unpublish' | 'relist' | 'delete';
+
+/** The status a listing must currently be in for each transition to be legal. */
+const TRANSITION_FROM: Record<ListingTransition, ListingStatus> = {
+	publish: 'draft',
+	markSold: 'active',
+	unpublish: 'active',
+	relist: 'sold',
+	delete: 'draft'
+};
+
+/** Past-tense verb for the "can no longer be …" conflict message. */
+const TRANSITION_VERB: Record<ListingTransition, string> = {
+	publish: 'published',
+	markSold: 'marked as sold',
+	unpublish: 'unpublished',
+	relist: 'relisted',
+	delete: 'deleted'
+};
+
+/** Confirmation message shown after a successful transition. */
+const TRANSITION_DONE: Record<ListingTransition, string> = {
+	publish: 'Listing published.',
+	markSold: 'Marked as sold.',
+	unpublish: 'Listing unpublished — it’s a draft again.',
+	relist: 'Listing relisted.',
+	delete: 'Listing deleted.'
+};
+
+interface StoredListing {
+	title: string;
+	description: string;
+	price: number | string;
+	category_id: string;
+	condition: string | null;
+}
+
+/**
+ * Re-validate an already-stored listing against the SAME publish rules the
+ * Section 7 form enforces (full field validation + a category that resolves to a
+ * subcategory + condition and at least one photo for goods). Used when publishing
+ * straight from the management view, where there's no form to submit.
+ */
+function validateStoredForPublish(
+	listing: StoredListing,
+	tree: CategoryTree[],
+	imageCount: number
+) {
+	const parsed = publishListingSchema.safeParse({
+		title: listing.title,
+		description: listing.description,
+		price: listing.price,
+		categoryId: listing.category_id,
+		locationArea: '',
+		condition: listing.condition ?? ''
+	});
+	const errors: Record<string, string> = parsed.success ? {} : fieldErrors(parsed.error);
+
+	const match = findSubcategory(tree, listing.category_id);
+	if (!match) errors.categoryId ??= 'This listing’s category is no longer valid.';
+
+	if (match && !isServiceTop(match.top)) {
+		if (!listing.condition) errors.condition ??= 'Add the item condition before publishing.';
+		if (imageCount < 1) errors.images ??= 'Add at least one photo before publishing.';
+	}
+
+	const ok = parsed.success && !!match && Object.keys(errors).length === 0;
+	return ok ? { ok: true as const } : { ok: false as const, errors };
+}
+
+/**
+ * Perform a lifecycle transition, owner- and status-checked server-side. Returns
+ * `fail(...)` for an illegal/failed move (409 when the current status doesn't
+ * permit it, 400 with `publishErrors` when a publish doesn't pass validation),
+ * throws `error(404)` when the listing isn't the caller's, or returns
+ * `{ success, id, message }` on success.
+ */
+export async function transitionListing(
+	event: RequestEvent,
+	transition: ListingTransition,
+	listingId: string
+) {
+	const {
+		locals: { supabase, user }
+	} = event;
+
+	const { data: listing } = await supabase
+		.from('listings')
+		.select(
+			'id, seller_id, status, published_at, title, description, price, category_id, condition'
+		)
+		.eq('id', listingId)
+		.maybeSingle();
+
+	if (!listing || listing.seller_id !== user!.id) error(404, 'Not found');
+
+	const requiredFrom = TRANSITION_FROM[transition];
+	if (listing.status !== requiredFrom) {
+		return fail(409, {
+			id: listingId,
+			transitionError: `This listing can no longer be ${TRANSITION_VERB[transition]} — it’s ${listing.status} now.`
+		});
+	}
+
+	if (transition === 'delete') {
+		// Remove the storage objects first (storage isn't FK-cascaded); the
+		// listing_images rows then cascade when the listing row is deleted.
+		const { data: imgs } = await supabase
+			.from('listing_images')
+			.select('storage_path')
+			.eq('listing_id', listing.id);
+		const paths = (imgs ?? []).map((i) => i.storage_path);
+		if (paths.length) await supabase.storage.from(LISTING_IMAGES_BUCKET).remove(paths);
+
+		const { error: delErr } = await supabase
+			.from('listings')
+			.delete()
+			.eq('id', listing.id)
+			.eq('status', 'draft'); // RLS also enforces this; belt and braces
+		if (delErr)
+			return fail(500, { id: listingId, transitionError: 'Could not delete the listing.' });
+		return { success: true, id: listingId, deleted: true, message: TRANSITION_DONE.delete };
+	}
+
+	if (transition === 'publish') {
+		const tree = (await loadCategoryTree(supabase)) as CategoryTree[];
+		const { count } = await supabase
+			.from('listing_images')
+			.select('id', { count: 'exact', head: true })
+			.eq('listing_id', listing.id);
+		const check = validateStoredForPublish(listing, tree, count ?? 0);
+		if (!check.ok) {
+			return fail(400, {
+				id: listingId,
+				publishErrors: check.errors,
+				transitionError: 'This listing isn’t ready to publish yet.'
+			});
+		}
+		const patch: Database['public']['Tables']['listings']['Update'] = { status: 'active' };
+		if (!listing.published_at) patch.published_at = new Date().toISOString();
+		const { error: updErr } = await supabase
+			.from('listings')
+			.update(patch)
+			.eq('id', listing.id)
+			.eq('status', 'draft');
+		if (updErr)
+			return fail(500, { id: listingId, transitionError: 'Could not publish the listing.' });
+		return { success: true, id: listingId, message: TRANSITION_DONE.publish };
+	}
+
+	// markSold / unpublish / relist — simple status moves.
+	const patch: Database['public']['Tables']['listings']['Update'] =
+		transition === 'markSold'
+			? { status: 'sold' }
+			: transition === 'unpublish'
+				? { status: 'draft' }
+				: { status: 'active', published_at: new Date().toISOString() }; // relist
+
+	const { error: updErr } = await supabase
+		.from('listings')
+		.update(patch)
+		.eq('id', listing.id)
+		.eq('status', requiredFrom);
+	if (updErr) return fail(500, { id: listingId, transitionError: 'Could not update the listing.' });
+	return { success: true, id: listingId, message: TRANSITION_DONE[transition] };
 }
