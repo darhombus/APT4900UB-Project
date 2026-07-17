@@ -73,6 +73,12 @@
 	 * a manual refresh.
 	 */
 	onMount(() => {
+		// Hydration sentinel. onMount runs only after the client has SUCCESSFULLY
+		// hydrated this page, so e2e tests can wait for html[data-hydrated] to prove
+		// handlers are wired. If hydration bails, this never sets it and the waiting
+		// test times out — turning a silent, invisible failure into a loud one.
+		document.documentElement.dataset.hydrated = 'true';
+
 		const {
 			data: { subscription }
 		} = supabase.auth.onAuthStateChange((_, newSession) => {
