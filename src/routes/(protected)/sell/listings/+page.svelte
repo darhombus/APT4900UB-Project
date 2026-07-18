@@ -147,7 +147,7 @@
 			<h1 class="font-display text-2xl font-bold text-ink">Your listings</h1>
 			<p class="mt-1 text-sm text-muted">Publish, update, and track what you’re selling.</p>
 		</div>
-		<Button href="/sell/listings/new">New listing</Button>
+		<Button href="/sell/listings/new">+ New listing</Button>
 	</div>
 
 	{#if data.counts.all === 0}

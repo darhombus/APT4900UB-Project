@@ -68,42 +68,51 @@ export async function saveListingAction(
 		condition: field(formData, 'condition')
 	};
 
+	// Validate the payload FIRST, before any database work. An invalid submission
+	// (the common fast-fail case) returns here without the target-row lookup, the
+	// category tree, or an image count — so it costs a request parse, nothing more.
+	// The client mirrors this schema, so with JS an invalid form never even POSTs;
+	// the server stays authoritative for the no-JS path and forged requests.
+	const schema = intent === 'publish' ? publishListingSchema : draftListingSchema;
+	const parsed = schema.safeParse(raw);
+	if (!parsed.success) {
+		return fail(400, { errors: fieldErrors(parsed.error), values: raw });
+	}
+	const data = parsed.data;
+
 	// Resolve the target row: the edit route's param, or a new-page draft's hidden
 	// id. Owner-only — the edit load already 404s strangers, but re-check so the
 	// action is safe standalone and a forged hidden id can't hit another seller.
 	const targetId = listingIdFromRoute ?? (field(formData, 'listingId') || null);
 	let existing: ExistingListing | null = null;
 	if (targetId) {
-		const { data } = await supabase
+		const { data: row } = await supabase
 			.from('listings')
 			.select('id, seller_id, status, published_at')
 			.eq('id', targetId)
 			.maybeSingle();
-		if (!data || data.seller_id !== sellerId) {
+		if (!row || row.seller_id !== sellerId) {
 			if (listingIdFromRoute) error(404, 'Not found');
 			return fail(400, {
 				formError: 'That listing could not be found. Reload the page and try again.',
 				values: raw
 			});
 		}
-		existing = data;
+		existing = row;
 	}
 
-	// Field-level validation against the intent's schema.
-	const schema = intent === 'publish' ? publishListingSchema : draftListingSchema;
-	const parsed = schema.safeParse(raw);
-	const errors: Record<string, string> = parsed.success ? {} : fieldErrors(parsed.error);
-
-	// The category must resolve to a real subcategory (never a top-level one).
+	// The category must resolve to a real subcategory (never a top-level one) — the
+	// one validation that genuinely needs data, so it follows the read; the cheap
+	// schema checks already passed above.
 	const tree = (await loadCategoryTree(supabase)) as CategoryTree[];
-	const match = raw.categoryId ? findSubcategory(tree, raw.categoryId) : null;
-	if (!match) errors.categoryId ??= raw.categoryId ? 'Choose a subcategory' : 'Choose a category';
+	const match = findSubcategory(tree, data.categoryId);
+	const errors: Record<string, string> = {};
+	if (!match) errors.categoryId = 'Choose a subcategory';
 
 	const service = match ? isServiceTop(match.top) : false;
 
 	// Services store a null condition; goods keep the chosen value.
-	const condition: ItemCondition | null =
-		match && !service && parsed.success ? (parsed.data.condition ?? null) : null;
+	const condition: ItemCondition | null = match && !service ? (data.condition ?? null) : null;
 
 	// Publish rules for goods (a condition and at least one photo); services are
 	// exempt. The rule itself lives in publishGoodsErrors() so it's unit-tested.
@@ -119,10 +128,11 @@ export async function saveListingAction(
 		Object.assign(errors, publishGoodsErrors({ isService: service, condition, imageCount }));
 	}
 
-	if (!parsed.success || !match || Object.keys(errors).length > 0) {
+	// `!match` is implied by errors being non-empty (it sets categoryId), but keep it
+	// explicit so `match` narrows to non-null for the payload below.
+	if (!match || Object.keys(errors).length > 0) {
 		return fail(400, { errors, values: raw });
 	}
-	const data = parsed.data;
 
 	const payload = {
 		title: data.title,

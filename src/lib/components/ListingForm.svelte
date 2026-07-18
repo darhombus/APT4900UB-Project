@@ -22,8 +22,11 @@
 		findSubcategory,
 		isServiceTop,
 		formatThousands,
+		draftListingSchema,
+		publishListingSchema,
 		type CategoryTree
 	} from '$lib/validation/listings';
+	import { fieldErrors } from '$lib/validation/auth';
 
 	type ListingStatus = Database['public']['Enums']['listing_status'];
 
@@ -121,7 +124,10 @@
 	// row offers a single "Save changes" that never changes its status.
 	const isDraftMode = $derived(!listing || listing.status === 'draft');
 
-	const errors = $derived<Record<string, string>>(form?.errors ?? {});
+	// Client validation errors take precedence once a submit is attempted; the
+	// server's `form.errors` still drive the no-JS path and any server-only failure.
+	let clientErrors = $state<Record<string, string> | null>(null);
+	const errors = $derived<Record<string, string>>(clientErrors ?? form?.errors ?? {});
 
 	// When a lazy draft save returns an id, adopt it so the uploader can attach.
 	$effect(() => {
@@ -145,8 +151,72 @@
 		priceDisplay = formatThousands(priceDisplay);
 	}
 
-	const submit: SubmitFunction = ({ action }) => {
-		submitting = action.search.includes('saveDraft') ? 'draft' : 'publish';
+	// Mirror the server's field validation in the browser so an invalid form never
+	// leaves it: the same zod schema + category resolution + publish-goods rules
+	// (all pure), over state the component already holds.
+	function validateClient(intent: 'draft' | 'publish'): Record<string, string> {
+		const raw = {
+			title,
+			description,
+			price: priceDisplay,
+			categoryId: selectedSubId,
+			locationArea,
+			condition
+		};
+		const schema = intent === 'publish' ? publishListingSchema : draftListingSchema;
+		const parsed = schema.safeParse(raw);
+		const errs: Record<string, string> = parsed.success ? {} : fieldErrors(parsed.error);
+
+		// The category must resolve to a real subcategory (the client holds the tree).
+		const match = selectedSubId ? findSubcategory(categoryTree, selectedSubId) : null;
+		if (!match) errs.categoryId ??= selectedSubId ? 'Choose a subcategory' : 'Choose a category';
+
+		// The goods condition + at-least-one-photo publish rules deliberately stay
+		// server-side: the photo count mirrors async uploader state, and the server
+		// checks the DB authoritatively — so the client sticks to the synchronous,
+		// reliable zod schema (which is what the PRD's fast-fail is about).
+		return errs;
+	}
+
+	// Field ids in visual order, so focus lands on the first invalid one.
+	const FOCUS_ID: Record<string, string> = {
+		title: 'title',
+		categoryId: 'categoryId',
+		condition: 'condition',
+		price: 'price',
+		description: 'description',
+		locationArea: 'location'
+	};
+	const FIELD_ORDER = ['title', 'categoryId', 'condition', 'price', 'description', 'locationArea'];
+	function focusFirstError(errs: Record<string, string>) {
+		for (const key of FIELD_ORDER) {
+			if (!errs[key]) continue;
+			const el = document.getElementById(FOCUS_ID[key]);
+			if (el instanceof HTMLElement) {
+				el.focus({ preventScroll: true });
+				el.scrollIntoView({ block: 'center' });
+			}
+			return;
+		}
+	}
+
+	const submit: SubmitFunction = ({ action, cancel }) => {
+		const intent = action.search.includes('saveDraft') ? 'draft' : 'publish';
+
+		// Fast-fail: an invalid form never leaves the browser — render inline errors
+		// immediately and move focus to the first invalid field.
+		const errs = validateClient(intent);
+		if (Object.keys(errs).length > 0) {
+			clientErrors = errs;
+			focusFirstError(errs);
+			cancel();
+			return;
+		}
+		// Passed the client checks — defer to the server for any residual field error
+		// (e.g. the goods photo rule), which then shows via `form.errors`.
+		clientErrors = null;
+
+		submitting = intent;
 		return async ({ result }) => {
 			// Outcome feedback as a toast; field errors stay inline via applyAction,
 			// which updates `form` (and follows a redirect) without resetting the
