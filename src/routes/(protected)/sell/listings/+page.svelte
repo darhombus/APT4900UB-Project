@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { navigating } from '$app/state';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Badge, Button, Card, Price } from '$lib/components/ui';
 	import { toast } from '$lib/toast.svelte';
@@ -17,6 +18,25 @@
 		{ key: 'paused', label: 'Paused', count: data.counts.paused },
 		{ key: 'sold', label: 'Sold', count: data.counts.sold }
 	] as const);
+
+	const TAB_KEYS = ['all', 'draft', 'active', 'paused', 'sold'] as const;
+	type Tab = (typeof TAB_KEYS)[number];
+
+	function tabFromUrl(url: URL): Tab {
+		const p = url.searchParams.get('tab');
+		return (TAB_KEYS as readonly string[]).includes(p ?? '') ? (p as Tab) : 'all';
+	}
+
+	// Flip the active tab at CLICK time, not after data arrives: while a navigation to
+	// this page is in flight, reflect its target tab; otherwise the loaded tab. The
+	// list area shows a skeleton for that same window.
+	const navToListings = $derived(
+		navigating.to?.url.pathname === '/sell/listings' ? navigating.to.url : null
+	);
+	const activeTab = $derived(navToListings ? tabFromUrl(navToListings) : data.tab);
+	const tabLoading = $derived(navToListings !== null);
+
+	const SKELETON_ROWS = [0, 1, 2, 3];
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -161,14 +181,15 @@
 			</div>
 		</Card>
 	{:else}
-		<!-- Filter tabs -->
-		<div class="flex flex-wrap gap-1 border-b border-border">
+		<!-- Filter tabs: real ?tab= links, preloaded on hover/touch so the common case is
+		     instant, with the active state flipping at click time (see activeTab). -->
+		<div class="flex flex-wrap gap-1 border-b border-border" data-sveltekit-preload-data="hover">
 			{#each tabs as t (t.key)}
 				<a
 					href={t.key === 'all' ? '/sell/listings' : `?tab=${t.key}`}
-					aria-current={data.tab === t.key ? 'page' : undefined}
+					aria-current={activeTab === t.key ? 'page' : undefined}
 					class={`-mb-px flex items-center gap-1.5 rounded-t-control border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-						data.tab === t.key
+						activeTab === t.key
 							? 'border-brand text-ink'
 							: 'border-transparent text-muted hover:text-ink'
 					}`}
@@ -181,7 +202,24 @@
 			{/each}
 		</div>
 
-		{#if data.listings.length === 0}
+		{#if tabLoading}
+			<!-- Lightweight loading state (design-foundation tokens) while the tab loads. -->
+			<div class="overflow-hidden rounded-card border border-border bg-surface" aria-hidden="true">
+				<div class="animate-pulse divide-y divide-border">
+					{#each SKELETON_ROWS as i (i)}
+						<div class="flex items-center gap-3 px-4 py-3">
+							<div class="h-12 w-12 flex-none rounded-control bg-neutral-tint"></div>
+							<div class="min-w-0 flex-1 space-y-2">
+								<div class="h-3.5 w-1/2 rounded bg-neutral-tint"></div>
+								<div class="h-3 w-1/4 rounded bg-neutral-tint"></div>
+							</div>
+							<div class="hidden h-8 w-24 flex-none rounded-control bg-neutral-tint sm:block"></div>
+						</div>
+					{/each}
+				</div>
+			</div>
+			<span class="sr-only" role="status">Loading listings…</span>
+		{:else if data.listings.length === 0}
 			<Card class="text-center">
 				<p class="py-6 text-sm text-muted">No {data.tab} listings.</p>
 			</Card>
