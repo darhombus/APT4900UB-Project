@@ -9,6 +9,7 @@
 	// layout — loaded on every page — doesn't pull the heavy ListingForm/
 	// ImageUploader into its client bundle and slow hydration.
 	import SearchBar from '$lib/components/SearchBar.svelte';
+	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -271,4 +272,7 @@
 			<p class="text-sm text-subtle">© {year} My Soko</p>
 		</div>
 	</footer>
+
+	<!-- App-wide outcome notifications; rendered once here, never per page. -->
+	<ToastContainer />
 </div>

@@ -2,7 +2,8 @@
 	import { untrack } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import type { Database } from '$lib/types/database';
-	import { Alert, Badge } from '$lib/components/ui';
+	import { Badge } from '$lib/components/ui';
+	import { toast } from '$lib/toast.svelte';
 	import { validateImageFile, compressToWebp } from '$lib/images';
 	import { buildImagePath, publicUrl, LISTING_IMAGES_BUCKET } from '$lib/listing-images';
 
@@ -51,8 +52,6 @@
 				}))
 		)
 	);
-	let notice = $state<string | null>(null);
-
 	const ctrl =
 		'flex h-7 w-7 items-center justify-center rounded-control text-white transition-colors hover:bg-white/25 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent';
 
@@ -70,22 +69,21 @@
 		const picked = Array.from(input.files ?? []);
 		input.value = ''; // let the same file be re-picked later
 		if (picked.length === 0) return;
-		notice = null;
 
 		const remaining = max - images.length;
 		if (remaining <= 0) {
-			notice = `You can add up to ${max} photos.`;
+			toast.warning(`You can add up to ${max} photos.`);
 			return;
 		}
 		const toAdd = picked.slice(0, remaining);
 		if (picked.length > remaining) {
-			notice = `You can add up to ${max} photos — kept the first ${remaining}.`;
+			toast.warning(`You can add up to ${max} photos — kept the first ${remaining}.`);
 		}
 
 		for (const file of toAdd) {
 			const check = validateImageFile(file);
 			if (!check.ok) {
-				notice = check.error;
+				toast.warning(check.error);
 				continue;
 			}
 			await uploadOne(file);
@@ -186,10 +184,6 @@
 </script>
 
 <div class="space-y-3">
-	{#if notice}
-		<Alert variant="warning">{notice}</Alert>
-	{/if}
-
 	<div class="grid grid-cols-3 gap-3 sm:grid-cols-4">
 		{#each images as img, i (img.key)}
 			<div

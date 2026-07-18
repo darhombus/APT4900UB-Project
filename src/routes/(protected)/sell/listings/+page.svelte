@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { Alert, Badge, Button, Card, Price } from '$lib/components/ui';
+	import { Badge, Button, Card, Price } from '$lib/components/ui';
+	import { toast } from '$lib/toast.svelte';
 	import type { Database } from '$lib/types/database';
-	import type { PageData, ActionData } from './$types';
+	import type { PageData } from './$types';
 
 	type ListingStatus = Database['public']['Enums']['listing_status'];
 
-	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
 	const tabs = $derived([
 		{ key: 'all', label: 'All', count: data.counts.all },
@@ -16,20 +17,6 @@
 		{ key: 'paused', label: 'Paused', count: data.counts.paused },
 		{ key: 'sold', label: 'Sold', count: data.counts.sold }
 	] as const);
-
-	const feedback = $derived.by(() => {
-		if (!form) return null;
-		if ('success' in form && form.success)
-			return { kind: 'success' as const, message: form.message };
-		if ('transitionError' in form)
-			return {
-				kind: 'error' as const,
-				message: form.transitionError,
-				publishErrors: 'publishErrors' in form ? form.publishErrors : undefined,
-				id: form.id
-			};
-		return null;
-	});
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -52,8 +39,16 @@
 				return;
 			}
 			pending = `${id}:${transition}`;
-			return async ({ update }) => {
+			return async ({ result, update }) => {
 				await update();
+				if (result.type === 'success') {
+					const message = (result.data as { message?: string } | undefined)?.message;
+					if (message) toast.success(message);
+				} else if (result.type === 'failure') {
+					const message = (result.data as { transitionError?: string } | undefined)
+						?.transitionError;
+					if (message) toast.error(message);
+				}
 				pending = null;
 			};
 		};
@@ -154,25 +149,6 @@
 		</div>
 		<Button href="/sell/listings/new">New listing</Button>
 	</div>
-
-	{#if feedback}
-		<Alert variant={feedback.kind === 'success' ? 'success' : 'error'}>
-			{feedback.message}
-			{#if feedback.kind === 'error' && feedback.publishErrors}
-				<ul class="mt-1 list-disc pl-5">
-					{#each Object.values(feedback.publishErrors) as msg (msg)}
-						<li>{msg}</li>
-					{/each}
-				</ul>
-				<a
-					href={`/sell/listings/${feedback.id}/edit`}
-					class="mt-1 inline-block font-medium underline"
-				>
-					Edit listing
-				</a>
-			{/if}
-		</Alert>
-	{/if}
 
 	{#if data.counts.all === 0}
 		<Card class="text-center">

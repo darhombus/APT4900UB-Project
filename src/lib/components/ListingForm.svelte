@@ -4,8 +4,9 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import type { Database } from '$lib/types/database';
-	import { Alert, Badge, Button, Card, Input, Label, Select, Textarea } from '$lib/components/ui';
+	import { Badge, Button, Card, Input, Label, Select, Textarea } from '$lib/components/ui';
 	import { ImageUploader } from '$lib/components';
+	import { toast } from '$lib/toast.svelte';
 	import {
 		CONDITIONS,
 		NAIROBI_AREAS,
@@ -112,8 +113,6 @@
 	const isDraftMode = $derived(!listing || listing.status === 'draft');
 
 	const errors = $derived<Record<string, string>>(form?.errors ?? {});
-	const formError = $derived(form?.formError ?? null);
-	const savedStatus = $derived(form?.success ? (form.status ?? null) : null);
 
 	// When a lazy draft save returns an id, adopt it so the uploader can attach.
 	$effect(() => {
@@ -140,9 +139,18 @@
 	const submit: SubmitFunction = ({ action }) => {
 		submitting = action.search.includes('saveDraft') ? 'draft' : 'publish';
 		return async ({ result }) => {
-			// applyAction updates `form` (and follows a redirect) without resetting
-			// the fields the seller has entered — progressive enhancement over the
-			// native POST, matching how the auth forms behave.
+			// Outcome feedback as a toast; field errors stay inline via applyAction,
+			// which updates `form` (and follows a redirect) without resetting the
+			// seller's entered fields — progressive enhancement over the native POST.
+			if (result.type === 'redirect') {
+				toast.success(isDraftMode ? 'Listing published' : 'Changes saved');
+			} else if (result.type === 'success') {
+				const status = (result.data as { status?: string } | undefined)?.status;
+				toast.success(status === 'draft' ? 'Draft saved' : 'Changes saved');
+			} else if (result.type === 'failure') {
+				const message = (result.data as { formError?: string } | undefined)?.formError;
+				if (message) toast.error(message);
+			}
 			await applyAction(result);
 			submitting = null;
 		};
@@ -165,13 +173,6 @@
 			<Badge variant={listing.status}><span class="capitalize">{listing.status}</span></Badge>
 		{/if}
 	</div>
-
-	{#if formError}
-		<Alert variant="error">{formError}</Alert>
-	{/if}
-	{#if savedStatus}
-		<Alert variant="success">{savedStatus === 'draft' ? 'Draft saved.' : 'Changes saved.'}</Alert>
-	{/if}
 
 	<form method="POST" action="?/saveDraft" use:enhance={submit} class="space-y-6">
 		<input type="hidden" name="listingId" value={listingId ?? ''} />
