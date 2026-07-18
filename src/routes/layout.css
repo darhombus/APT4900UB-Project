@@ -1,1 +1,81 @@
 @import 'tailwindcss';
+
+/* ============================================================================
+   MY SOKO — DESIGN FOUNDATION
+   Direction "Soko": clean utilitarian trading floor. Cool neutrals, one
+   confident brand green, prices as the loudest thing, hairline-bordered cards
+   with a 12px radius. Light mode only for this phase; every weight is >= 400.
+
+   These @theme tokens are the single source of truth. Components compose from
+   the utilities they generate (bg-brand, text-ink, rounded-card, shadow-card,
+   font-display, badge tints, ...) — never one-off hex values.
+   ============================================================================ */
+@theme {
+	/* Brand — trading green (interactive: buttons, links, active nav) */
+	--color-brand: #067a57;
+	--color-brand-hover: #056046;
+	--color-brand-tint: #e4f1eb; /* filled/active surfaces */
+	--color-brand-strong: #05593f; /* text on tint */
+
+	/* Ink & neutrals */
+	--color-ink: #0f1b2d; /* headings, prices, primary text */
+	--color-muted: #45525f; /* secondary text */
+	--color-subtle: #6b7680; /* captions, placeholders */
+	--color-page: #f7f8f7; /* app background */
+	--color-surface: #ffffff; /* cards, header, menus */
+	--color-border: #e2e6e4; /* hairlines */
+	--color-neutral-tint: #eff1f0; /* draft badge / quiet fills */
+	--color-neutral-strong: #3a444c; /* text on neutral tint */
+
+	/* Amber accent — ATTENTION ONLY (new / featured). Green = action. */
+	--color-accent: #f2a712;
+	--color-accent-hover: #d9930a;
+	--color-accent-tint: #fcf0d6;
+	--color-accent-strong: #92610a;
+
+	/* Semantic */
+	--color-success: #067a57;
+	--color-success-tint: #e4f1eb;
+	--color-success-strong: #05593f;
+	--color-warning: #b45309;
+	--color-warning-tint: #f8ead9;
+	--color-warning-strong: #8a3f07;
+	--color-error: #c0362c;
+	--color-error-hover: #a52c24;
+	--color-error-tint: #f8e5e3;
+	--color-error-strong: #90261f;
+
+	/* Typefaces (registered by Fontsource imports in +layout.svelte) */
+	--font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--font-display: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+
+	/* Radii */
+	--radius-control: 8px; /* inputs, buttons, small surfaces */
+	--radius-card: 12px; /* listing cards & panels (from Direction B) */
+	--radius-pill: 9999px; /* badges, chips, avatars */
+
+	/* Shadows — restrained; cards lean on hairline borders, not elevation */
+	--shadow-card: 0 1px 2px 0 rgb(15 27 45 / 0.04);
+	--shadow-menu: 0 8px 24px -8px rgb(15 27 45 / 0.18);
+
+	/* Spacing keeps Tailwind's 0.25rem base scale — a deliberate, familiar step. */
+}
+
+@layer base {
+	html {
+		font-family: var(--font-sans);
+		/* Slightly tighter default line-height reads better in dense grids. */
+		line-height: 1.5;
+		-webkit-text-size-adjust: 100%;
+	}
+
+	body {
+		background-color: var(--color-page);
+		color: var(--color-ink);
+	}
+
+	/* Prices and any tabular figures should align in columns. */
+	.tnum {
+		font-variant-numeric: tabular-nums;
+	}
+}
