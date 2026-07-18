@@ -4,7 +4,16 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import type { Database } from '$lib/types/database';
-	import { Badge, Button, Card, Input, Label, Select, Textarea } from '$lib/components/ui';
+	import {
+		Badge,
+		Button,
+		Card,
+		Combobox,
+		Input,
+		Label,
+		Select,
+		Textarea
+	} from '$lib/components/ui';
 	import { ImageUploader } from '$lib/components';
 	import { toast } from '$lib/toast.svelte';
 	import {
@@ -194,8 +203,7 @@
 			<div class="grid gap-4 sm:grid-cols-2">
 				<div>
 					<Label for="category-top">Category</Label>
-					<Select id="category-top" bind:value={selectedTopId}>
-						<option value="">Choose a category</option>
+					<Select id="category-top" bind:value={selectedTopId} placeholder="Choose a category">
 						{#each categoryTree as top (top.id)}
 							<option value={top.id}>{top.name}</option>
 						{/each}
@@ -209,10 +217,8 @@
 						bind:value={selectedSubId}
 						disabled={!selectedTop}
 						error={errors.categoryId}
+						placeholder={selectedTop ? 'Choose a subcategory' : 'Pick a category first'}
 					>
-						<option value=""
-							>{selectedTop ? 'Choose a subcategory' : 'Pick a category first'}</option
-						>
 						{#each subOptions as sub (sub.id)}
 							<option value={sub.id}>{sub.name}</option>
 						{/each}
@@ -223,8 +229,13 @@
 			{#if selectedTop && !isService}
 				<div>
 					<Label for="condition">Condition</Label>
-					<Select id="condition" name="condition" bind:value={condition} error={errors.condition}>
-						<option value="">Choose condition</option>
+					<Select
+						id="condition"
+						name="condition"
+						bind:value={condition}
+						error={errors.condition}
+						placeholder="Choose condition"
+					>
 						{#each CONDITIONS as c (c.value)}
 							<option value={c.value}>{c.label}</option>
 						{/each}
@@ -260,19 +271,14 @@
 
 			<div>
 				<Label for="location" optional>Location</Label>
-				<Input
+				<Combobox
 					id="location"
 					name="locationArea"
-					list="nairobi-areas"
+					options={NAIROBI_AREAS}
 					bind:value={locationArea}
 					placeholder="e.g. Westlands"
 					error={errors.locationArea}
 				/>
-				<datalist id="nairobi-areas">
-					{#each NAIROBI_AREAS as area (area)}
-						<option value={area}></option>
-					{/each}
-				</datalist>
 			</div>
 		</Card>
 

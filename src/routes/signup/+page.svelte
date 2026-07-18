@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { AuthCard } from '$lib/components';
-	import { Button, Input, Label } from '$lib/components/ui';
+	import { Button, Input, Label, PasswordInput } from '$lib/components/ui';
 	import { notifyFromResult } from '$lib/toast.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData } from './$types';
@@ -80,23 +80,11 @@
 
 			<div>
 				<Label for="password">Password</Label>
-				<Input
+				<PasswordInput
 					id="password"
 					name="password"
-					type="password"
 					autocomplete="new-password"
 					error={errors.password}
-				/>
-			</div>
-
-			<div>
-				<Label for="confirmPassword">Confirm password</Label>
-				<Input
-					id="confirmPassword"
-					name="confirmPassword"
-					type="password"
-					autocomplete="new-password"
-					error={errors.confirmPassword}
 				/>
 			</div>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { AVATAR_TYPES, AVATAR_MAX_BYTES } from '$lib/validation/auth';
-	import { Badge, Button, Card, Input, Label } from '$lib/components/ui';
+	import { Badge, Button, Card, Input, Label, PasswordInput } from '$lib/components/ui';
 	import { toast } from '$lib/toast.svelte';
 	import type { SubmitFunction, ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
@@ -194,10 +194,9 @@
 		<form method="POST" action="?/changePassword" use:enhance={onPassword} class="mt-4 space-y-4">
 			<div>
 				<Label for="password">New password</Label>
-				<Input
+				<PasswordInput
 					id="password"
 					name="password"
-					type="password"
 					autocomplete="new-password"
 					error={form?.section === 'password' && 'errors' in form
 						? (form.errors?.password ?? undefined)
@@ -206,10 +205,9 @@
 			</div>
 			<div>
 				<Label for="confirmPassword">Confirm new password</Label>
-				<Input
+				<PasswordInput
 					id="confirmPassword"
 					name="confirmPassword"
-					type="password"
 					autocomplete="new-password"
 					error={form?.section === 'password' && 'errors' in form
 						? (form.errors?.confirmPassword ?? undefined)

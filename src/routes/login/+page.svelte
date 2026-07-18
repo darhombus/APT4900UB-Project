@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { AuthCard } from '$lib/components';
-	import { Button, Input, Label } from '$lib/components/ui';
+	import { Button, Input, Label, PasswordInput } from '$lib/components/ui';
 	import { toast, notifyFromResult } from '$lib/toast.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData } from './$types';
@@ -69,10 +69,9 @@
 					Forgot password?
 				</a>
 			</div>
-			<Input
+			<PasswordInput
 				id="password"
 				name="password"
-				type="password"
 				autocomplete="current-password"
 				error={errors.password}
 			/>
