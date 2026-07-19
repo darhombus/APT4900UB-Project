@@ -217,8 +217,10 @@ export async function saveListingAction(
 //   paused ──Republish─▶ active   (published_at preserved — NOT refreshed)
 //   active ──Mark sold─▶ sold
 //   sold   ──Relist────▶ active   (published_at re-stamped to now())
-//   draft  ──Delete────▶ (gone)   (hard delete; RLS allows it only for drafts;
-//                                   storage objects removed too)
+//   draft              ─Delete─▶ (gone)     (hard delete; storage removed; RLS allows
+//                                            DELETE only for drafts)
+//   active/paused/sold ─Delete─▶ deleted    (soft delete via UPDATE; row + storage
+//                                            KEPT and hidden everywhere; terminal)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Past-tense verb for the "can no longer be …" conflict message. */
@@ -318,21 +320,37 @@ export async function transitionListing(
 	}
 
 	if (transition === 'delete') {
-		// Remove the storage objects first (storage isn't FK-cascaded); the
-		// listing_images rows then cascade when the listing row is deleted.
-		const { data: imgs } = await supabase
-			.from('listing_images')
-			.select('storage_path')
-			.eq('listing_id', listing.id);
-		const paths = (imgs ?? []).map((i) => i.storage_path);
-		if (paths.length) await supabase.storage.from(LISTING_IMAGES_BUCKET).remove(paths);
+		if (listing.status === 'draft') {
+			// Hard delete — a draft was never public, so nothing references it. Remove
+			// the storage objects first (not FK-cascaded); the listing_images rows then
+			// cascade when the listing row is deleted.
+			const { data: imgs } = await supabase
+				.from('listing_images')
+				.select('storage_path')
+				.eq('listing_id', listing.id);
+			const paths = (imgs ?? []).map((i) => i.storage_path);
+			if (paths.length) await supabase.storage.from(LISTING_IMAGES_BUCKET).remove(paths);
 
-		const { error: delErr } = await supabase
-			.from('listings')
-			.delete()
-			.eq('id', listing.id)
-			.eq('status', 'draft'); // RLS also enforces this; belt and braces
-		if (delErr)
+			const { error: delErr } = await supabase
+				.from('listings')
+				.delete()
+				.eq('id', listing.id)
+				.eq('status', 'draft'); // RLS also enforces this; belt and braces
+			if (delErr)
+				return fail(500, { id: listingId, transitionError: 'Could not delete the listing.' });
+			return { success: true, id: listingId, deleted: true, message: TRANSITION_DONE.delete };
+		}
+
+		// Soft delete for ever-published listings (active/paused/sold) via a SECURITY
+		// DEFINER RPC (see the migration): it enforces owner + from-status and isn't
+		// tripped up by the SELECT policy that hides the resulting `deleted` row from
+		// its owner (a plain UPDATE fails PostgREST's returned-row check with 42501).
+		// The row and its storage objects are kept — a later Inngest job cleans
+		// storage. Terminal: there is no path out of `deleted`.
+		const { data: softOk, error: softErr } = await supabase.rpc('soft_delete_listing', {
+			p_id: listing.id
+		});
+		if (softErr || !softOk)
 			return fail(500, { id: listingId, transitionError: 'Could not delete the listing.' });
 		return { success: true, id: listingId, deleted: true, message: TRANSITION_DONE.delete };
 	}

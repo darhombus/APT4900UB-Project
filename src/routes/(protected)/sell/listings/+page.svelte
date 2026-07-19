@@ -49,14 +49,24 @@
 	let pending = $state<string | null>(null);
 	const isPending = (id: string, t: string) => pending === `${id}:${t}`;
 
-	function act(transition: string, id: string): SubmitFunction {
+	const DELETABLE: readonly ListingStatus[] = ['draft', 'active', 'paused', 'sold'];
+
+	function act(
+		transition: string,
+		id: string,
+		listing?: (typeof data.listings)[number]
+	): SubmitFunction {
 		return ({ cancel }) => {
-			if (
-				transition === 'delete' &&
-				!confirm('Delete this draft for good? This also removes its photos, and can’t be undone.')
-			) {
-				cancel();
-				return;
+			if (transition === 'delete') {
+				const name = listing?.title ? `“${listing.title}”` : 'this listing';
+				const message =
+					listing?.status === 'draft'
+						? `Delete ${name}? This removes the draft and its photos for good — it can’t be undone.`
+						: `Delete ${name}? It will be removed from the marketplace for good — this can’t be undone.`;
+				if (!confirm(message)) {
+					cancel();
+					return;
+				}
 			}
 			pending = `${id}:${transition}`;
 			return async ({ result, update }) => {
@@ -90,18 +100,6 @@
 			</Button>
 		</form>
 		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>
-		<form method="POST" action="?/delete" use:enhance={act('delete', l.id)}>
-			<input type="hidden" name="id" value={l.id} />
-			<Button
-				type="submit"
-				size="sm"
-				variant="destructive"
-				loading={isPending(l.id, 'delete')}
-				disabled={!!pending}
-			>
-				Delete
-			</Button>
-		</form>
 	{:else if l.status === 'active'}
 		<form method="POST" action="?/markSold" use:enhance={act('markSold', l.id)}>
 			<input type="hidden" name="id" value={l.id} />
@@ -158,6 +156,20 @@
 		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>
 	{:else}
 		<span class="text-sm text-subtle">—</span>
+	{/if}
+	{#if DELETABLE.includes(l.status)}
+		<form method="POST" action="?/delete" use:enhance={act('delete', l.id, l)}>
+			<input type="hidden" name="id" value={l.id} />
+			<Button
+				type="submit"
+				size="sm"
+				variant="destructive"
+				loading={isPending(l.id, 'delete')}
+				disabled={!!pending}
+			>
+				Delete
+			</Button>
+		</form>
 	{/if}
 {/snippet}
 
