@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, user } }) 
 	let rowsQuery = supabase
 		.from('listings')
 		.select(
-			'id, title, price, status, created_at, condition, location_area, listing_images(storage_path, position)'
+			'id, title, price, status, created_at, condition, location_area, type, listing_images(storage_path, position)'
 		)
 		.eq('seller_id', user!.id)
 		.order('created_at', { ascending: false });
@@ -46,7 +46,11 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, user } }) 
 		created_at: l.created_at,
 		condition: l.condition,
 		location_area: l.location_area,
-		coverUrl: getCoverUrl(supabase, l)
+		coverUrl: getCoverUrl(supabase, l),
+		// A photo-less service shows a service glyph tile instead of the placeholder
+		// image (consistent with the service card variant).
+		isService: l.type === 'service',
+		hasImage: (l.listing_images?.length ?? 0) > 0
 	}));
 
 	return { listings: visible, counts, tab };

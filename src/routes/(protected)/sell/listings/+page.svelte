@@ -91,6 +91,38 @@
 	<Badge variant={status}><span class="capitalize">{status}</span></Badge>
 {/snippet}
 
+{#snippet thumb(l: (typeof data.listings)[number], size: string)}
+	{#if l.isService && !l.hasImage}
+		<!-- Photo-less service: a service glyph tile, never the placeholder-image icon. -->
+		<div
+			class={`${size} flex flex-none items-center justify-center rounded-control border border-border bg-brand-tint text-brand-strong`}
+			aria-hidden="true"
+		>
+			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none">
+				<circle cx="12" cy="17" r="1.6" fill="currentColor" />
+				<path
+					d="M8 13a5.5 5.5 0 0 1 8 0"
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linecap="round"
+				/>
+				<path
+					d="M5.5 10a9 9 0 0 1 13 0"
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linecap="round"
+				/>
+			</svg>
+		</div>
+	{:else}
+		<img
+			src={l.coverUrl}
+			alt=""
+			class={`${size} flex-none rounded-control border border-border object-cover`}
+		/>
+	{/if}
+{/snippet}
+
 {#snippet rowActions(l: (typeof data.listings)[number])}
 	{#if l.status === 'draft'}
 		<form method="POST" action="?/publish" use:enhance={act('publish', l.id)}>
@@ -255,11 +287,7 @@
 							<tr class="border-b border-border align-middle last:border-0">
 								<td class="px-4 py-3">
 									<div class="flex items-center gap-3">
-										<img
-											src={l.coverUrl}
-											alt=""
-											class="h-12 w-12 flex-none rounded-control border border-border object-cover"
-										/>
+										{@render thumb(l, 'h-12 w-12')}
 										<div class="min-w-0">
 											<a
 												href={`/sell/listings/${l.id}/edit`}
@@ -290,11 +318,7 @@
 				{#each data.listings as l (l.id)}
 					<Card>
 						<div class="flex gap-3">
-							<img
-								src={l.coverUrl}
-								alt=""
-								class="h-16 w-16 flex-none rounded-control border border-border object-cover"
-							/>
+							{@render thumb(l, 'h-16 w-16')}
 							<div class="min-w-0 flex-1">
 								<div class="flex items-start justify-between gap-2">
 									<a href={`/sell/listings/${l.id}/edit`} class="truncate font-medium text-ink">

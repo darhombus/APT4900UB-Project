@@ -93,6 +93,13 @@ export function listingTypeForTop(top: { slug: string }): 'product' | 'service' 
 	return isServiceTop(top) ? 'service' : 'product';
 }
 
+/** subcategory id → name, for labelling cards (e.g. the service-card variant). */
+export function subcategoryNameMap(tree: CategoryTree[]): Map<string, string> {
+	const map = new Map<string, string>();
+	for (const top of tree) for (const sub of top.children) map.set(sub.id, sub.name);
+	return map;
+}
+
 // ── Price helpers ───────────────────────────────────────────────────────────
 
 /**

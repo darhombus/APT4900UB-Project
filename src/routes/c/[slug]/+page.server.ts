@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { loadCategoryTree } from '$lib/server/categories';
 import { parseSearchParams, SEARCH_PAGE_SIZE, type SearchQuery } from '$lib/search';
 import { runSearch } from '$lib/server/search';
+import { subcategoryNameMap } from '$lib/validation/listings';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
@@ -47,7 +48,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		page: sp.page,
 		ranked: false
 	};
-	const { listings, total } = await runSearch(supabase, query);
+	const { listings, total } = await runSearch(supabase, query, subcategoryNameMap(tree));
 
 	return {
 		heading: isTop ? top.name : sub!.name,
