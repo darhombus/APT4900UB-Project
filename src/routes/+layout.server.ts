@@ -1,3 +1,4 @@
+import { loadCategoryTree } from '$lib/server/categories';
 import type { LayoutServerLoad } from './$types';
 
 /**
@@ -5,17 +6,30 @@ import type { LayoutServerLoad } from './$types';
  * session (the `auth` handle resolved it via getUser once for this request), so we
  * pass it straight down and forward cookies that +layout.ts uses to seed the
  * browser/server clients. For signed-in users we also fetch the header essentials
- * (avatar + name) so the nav can show the avatar with an initials fallback.
+ * (avatar + name) and the role (to gate the "New listing" action). The category
+ * tree feeds the slide-out sidebar rendered on every page.
  */
-export const load: LayoutServerLoad = async ({ locals: { session, user, supabase }, cookies }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies }) => {
+	const { session, user, supabase } = locals;
+
+	// Kick off the category query immediately so it overlaps the profile fetch.
+	const categoriesPromise = loadCategoryTree(supabase);
+
 	let profile: { full_name: string; avatar_url: string | null } | null = null;
+	let isSeller = false;
 	if (session && user) {
 		const { data } = await supabase
 			.from('profiles')
-			.select('full_name, avatar_url')
+			.select('full_name, avatar_url, role')
 			.eq('id', user.id)
 			.single();
-		profile = data;
+		if (data) {
+			profile = { full_name: data.full_name, avatar_url: data.avatar_url };
+			isSeller = data.role === 'seller' || data.role === 'admin';
+			// Prime the request-scoped role cache so the /sell guard reuses this fetch
+			// instead of issuing its own profile query.
+			locals.roleCache = Promise.resolve(data.role);
+		}
 	}
 
 	return {
@@ -25,6 +39,8 @@ export const load: LayoutServerLoad = async ({ locals: { session, user, supabase
 		// re-fetching it and racing the cookie. safeGetSession itself is unchanged.
 		user,
 		profile,
+		isSeller,
+		categoryTree: await categoriesPromise,
 		cookies: cookies.getAll()
 	};
 };
