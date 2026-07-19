@@ -1,11 +1,8 @@
 import { error } from '@sveltejs/kit';
 import { loadCategoryTree } from '$lib/server/categories';
-import { toCardData } from '$lib/listings-view';
+import { parseSearchParams, SEARCH_PAGE_SIZE, type SearchQuery } from '$lib/search';
+import { runSearch } from '$lib/server/search';
 import type { PageServerLoad } from './$types';
-
-const PAGE_SIZE = 24;
-const SORTS = ['newest', 'price_asc', 'price_desc'] as const;
-type Sort = (typeof SORTS)[number];
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const tree = await loadCategoryTree(supabase);
@@ -29,40 +26,41 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// Top-level: listings across the whole subtree; subcategory: just its own.
 	const categoryIds = isTop ? top.children.map((c) => c.id) : [sub!.id];
 
-	const page = Math.max(1, Math.floor(Number(url.searchParams.get('page')) || 1));
-	const sortParam = url.searchParams.get('sort') ?? 'newest';
-	const sort: Sort = (SORTS as readonly string[]).includes(sortParam)
-		? (sortParam as Sort)
-		: 'newest';
-	const from = (page - 1) * PAGE_SIZE;
+	// A category page is a search pre-scoped to the path's category with no text
+	// query, so it runs through the SAME executor as /search — the sort pills and
+	// price/condition filters behave identically (Section 8). `parseSearchParams`
+	// yields sort/price/condition/page from the URL (never `relevance`, since there
+	// is no query); the category comes from the path, not `?category=`.
+	const sp = parseSearchParams(url.searchParams);
+	const from = (sp.page - 1) * SEARCH_PAGE_SIZE;
+	const query: SearchQuery = {
+		args: {
+			q: [],
+			category_ids: categoryIds,
+			min_price: sp.minPrice,
+			max_price: sp.maxPrice,
+			conditions: sp.condition.length ? sp.condition : null,
+			sort: sp.sort
+		},
+		from,
+		to: from + SEARCH_PAGE_SIZE - 1,
+		page: sp.page,
+		ranked: false
+	};
+	const { listings, total } = await runSearch(supabase, query);
 
-	let query = supabase
-		.from('listings')
-		.select(
-			'id, title, price, location_area, condition, published_at, created_at, listing_images(storage_path, position)',
-			{ count: 'exact' }
-		)
-		.eq('status', 'active')
-		.in('category_id', categoryIds);
-
-	if (sort === 'price_asc') query = query.order('price', { ascending: true });
-	else if (sort === 'price_desc') query = query.order('price', { ascending: false });
-	else query = query.order('published_at', { ascending: false });
-	query = query.order('id', { ascending: true }); // stable tiebreaker for pagination
-
-	const { data, count } = await query.range(from, from + PAGE_SIZE - 1);
-
-	const total = count ?? 0;
 	return {
 		heading: isTop ? top.name : sub!.name,
 		slug: params.slug,
 		parent: isTop ? null : { name: top.name, slug: top.slug },
 		subcategories: isTop ? top.children.map((c) => ({ name: c.name, slug: c.slug })) : [],
-		listings: (data ?? []).map((l) => toCardData(supabase, l)),
-		page,
-		pageSize: PAGE_SIZE,
+		listings,
+		page: sp.page,
 		total,
-		totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-		sort
+		totalPages: Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE)),
+		sort: sp.sort,
+		minPrice: sp.minPrice,
+		maxPrice: sp.maxPrice,
+		condition: sp.condition
 	};
 };

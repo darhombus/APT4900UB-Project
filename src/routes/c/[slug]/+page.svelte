@@ -1,27 +1,29 @@
 <script lang="ts">
-	import { ListingCard } from '$lib/components';
+	import { navigating } from '$app/state';
+	import { FilterSortBar, ListingCard } from '$lib/components';
+	import { buildFilterUrl } from '$lib/filter-nav';
+	import type { SearchParams } from '$lib/search';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
-	// Clean URLs: omit `sort` when newest and `page` when 1. Values are URL-safe
-	// (a fixed sort key and an integer), so the query string is built directly.
-	function urlFor(opts: { page?: number; sort?: string } = {}): string {
-		const sort = opts.sort ?? data.sort;
-		const page = opts.page ?? data.page;
-		const parts: string[] = [];
-		if (sort && sort !== 'newest') parts.push(`sort=${sort}`);
-		if (page > 1) parts.push(`page=${page}`);
-		return parts.length ? `?${parts.join('&')}` : `/c/${data.slug}`;
-	}
+	const base = $derived(`/c/${data.slug}`);
 
-	const sortOptions = [
-		{ key: 'newest', label: 'Newest' },
-		{ key: 'price_asc', label: 'Price ↑' },
-		{ key: 'price_desc', label: 'Price ↓' }
-	] as const;
+	// The category page's URL state, shaped like a search: no free-text query, and
+	// its category fixed by the path (so the shared bar hides the category select).
+	const state: SearchParams = $derived({
+		q: '',
+		category: '',
+		minPrice: data.minPrice,
+		maxPrice: data.maxPrice,
+		condition: data.condition,
+		sort: data.sort,
+		page: data.page
+	});
 
-	// A windowed list of page numbers with ellipses for long ranges.
+	const countText = $derived(`${data.total} ${data.total === 1 ? 'listing' : 'listings'}`);
+	const loading = $derived(navigating.to?.url.pathname === base);
+
 	const pageItems = $derived.by(() => {
 		const { totalPages: tp, page: cur } = data;
 		const wanted = [...new Set([1, cur - 1, cur, cur + 1, tp])]
@@ -36,6 +38,8 @@
 		}
 		return out;
 	});
+
+	const SKELETON_CARDS = [0, 1, 2, 3, 4, 5, 6, 7];
 </script>
 
 <svelte:head>
@@ -46,23 +50,25 @@
 	/>
 </svelte:head>
 
-<main class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-	<!-- Breadcrumb -->
-	<nav class="flex flex-wrap items-center gap-1.5 text-sm text-subtle" aria-label="Breadcrumb">
-		<a href="/" class="hover:text-ink">Home</a>
-		{#if data.parent}
+<main class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-8">
+	<div class="space-y-2">
+		<!-- Breadcrumb -->
+		<nav class="flex flex-wrap items-center gap-1.5 text-sm text-subtle" aria-label="Breadcrumb">
+			<a href="/" class="hover:text-ink">Home</a>
+			{#if data.parent}
+				<span aria-hidden="true">/</span>
+				<a href={`/c/${data.parent.slug}`} class="hover:text-ink">{data.parent.name}</a>
+			{/if}
 			<span aria-hidden="true">/</span>
-			<a href={`/c/${data.parent.slug}`} class="hover:text-ink">{data.parent.name}</a>
-		{/if}
-		<span aria-hidden="true">/</span>
-		<span class="font-medium text-ink">{data.heading}</span>
-	</nav>
+			<span class="font-medium text-ink">{data.heading}</span>
+		</nav>
 
-	<h1 class="mt-2 font-display text-2xl font-bold text-ink">{data.heading}</h1>
+		<h1 class="font-display text-2xl font-bold text-ink">{data.heading}</h1>
+	</div>
 
-	<!-- Subcategory chips (top-level pages only) -->
+	<!-- Subcategory chips (top-level pages only) — the category page's own drill-down. -->
 	{#if data.subcategories.length > 0}
-		<div class="mt-4 flex flex-wrap gap-2">
+		<div class="flex flex-wrap gap-2">
 			{#each data.subcategories as sc (sc.slug)}
 				<a
 					href={`/c/${sc.slug}`}
@@ -74,48 +80,40 @@
 		</div>
 	{/if}
 
-	<!-- Result count + sort -->
-	<div class="mt-6 flex flex-wrap items-center justify-between gap-3">
-		<p class="text-sm text-subtle">
-			{data.total}
-			{data.total === 1 ? 'listing' : 'listings'}
-		</p>
-		<div class="flex items-center gap-1 rounded-control border border-border bg-surface p-0.5">
-			{#each sortOptions as opt (opt.key)}
-				<a
-					href={urlFor({ sort: opt.key, page: 1 })}
-					aria-current={data.sort === opt.key ? 'true' : undefined}
-					class={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-						data.sort === opt.key ? 'bg-brand text-white' : 'text-muted hover:text-ink'
-					}`}
-				>
-					{opt.label}
-				</a>
+	<FilterSortBar {base} params={state} {countText} />
+
+	{#if loading}
+		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-hidden="true">
+			{#each SKELETON_CARDS as i (i)}
+				<div class="animate-pulse overflow-hidden rounded-card border border-border bg-surface">
+					<div class="aspect-square bg-neutral-tint"></div>
+					<div class="space-y-2 p-3">
+						<div class="h-3.5 w-3/4 rounded bg-neutral-tint"></div>
+						<div class="h-3 w-1/3 rounded bg-neutral-tint"></div>
+					</div>
+				</div>
 			{/each}
 		</div>
-	</div>
-
-	<!-- Grid / empty state -->
-	{#if data.listings.length === 0}
-		<div class="mt-6 rounded-card border border-dashed border-border bg-surface p-12 text-center">
+		<span class="sr-only" role="status">Loading listings…</span>
+	{:else if data.listings.length === 0}
+		<div class="rounded-card border border-dashed border-border bg-surface p-12 text-center">
 			<p class="font-medium text-ink">No listings here yet</p>
 			<p class="mt-1 text-sm text-muted">
-				Nothing is posted in {data.heading} right now. Try another category.
+				Nothing matches in {data.heading} right now. Try adjusting your filters.
 			</p>
 		</div>
 	{:else}
-		<div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
 			{#each data.listings as listing (listing.id)}
 				<ListingCard {listing} />
 			{/each}
 		</div>
 
-		<!-- Pagination -->
 		{#if data.totalPages > 1}
-			<nav class="mt-8 flex items-center justify-center gap-1" aria-label="Pagination">
+			<nav class="flex items-center justify-center gap-1" aria-label="Pagination">
 				{#if data.page > 1}
 					<a
-						href={urlFor({ page: data.page - 1 })}
+						href={buildFilterUrl(base, state, { page: data.page - 1 })}
 						rel="prev"
 						class="rounded-control border border-border bg-surface px-3 py-2 text-sm font-medium text-ink hover:bg-page"
 					>
@@ -134,7 +132,7 @@
 						</span>
 					{:else}
 						<a
-							href={urlFor({ page: item })}
+							href={buildFilterUrl(base, state, { page: item })}
 							class="rounded-control border border-border bg-surface px-3.5 py-2 text-sm font-medium text-ink hover:bg-page"
 						>
 							{item}
@@ -143,7 +141,7 @@
 				{/each}
 				{#if data.page < data.totalPages}
 					<a
-						href={urlFor({ page: data.page + 1 })}
+						href={buildFilterUrl(base, state, { page: data.page + 1 })}
 						rel="next"
 						class="rounded-control border border-border bg-surface px-3 py-2 text-sm font-medium text-ink hover:bg-page"
 					>
