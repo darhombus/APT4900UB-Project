@@ -538,7 +538,7 @@ export type Database = {
           conditions?: Database["public"]["Enums"]["item_condition"][]
           max_price?: number
           min_price?: number
-          q?: string
+          q?: string[]
           sort?: string
         }
         Returns: {
