@@ -92,12 +92,17 @@
 	 */
 	let scrollAnim: number | null = null;
 	function scrollToTop() {
+		if (bttDebug) blog(`HANDLER fired  y=${Math.round(window.scrollY)}`);
 		if (scrollAnim !== null) cancelAnimationFrame(scrollAnim);
 		const start = window.scrollY;
-		if (start <= 0) return;
+		if (start <= 0) {
+			if (bttDebug) blog('early-return: already at top');
+			return;
+		}
 		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
 			window.scrollTo(0, 0);
 			scrollAnim = null;
+			if (bttDebug) blog(`instant (reduced-motion) → y=${Math.round(window.scrollY)}`);
 			return;
 		}
 		const startTime = performance.now();
@@ -106,7 +111,17 @@
 		const step = (now: number) => {
 			const t = Math.min(1, (now - startTime) / duration);
 			window.scrollTo(0, Math.round(start * (1 - easeOutCubic(t))));
-			scrollAnim = t < 1 ? requestAnimationFrame(step) : null;
+			if (t < 1) {
+				scrollAnim = requestAnimationFrame(step);
+			} else {
+				scrollAnim = null;
+				if (bttDebug) {
+					blog(`done → y=${Math.round(window.scrollY)}`);
+					// A revert here (something scrolls back down) proves scroll restoration
+					// or an anchor is fighting us, not the click.
+					setTimeout(() => blog(`+500ms → y=${Math.round(window.scrollY)}`), 500);
+				}
+			}
 		};
 		scrollAnim = requestAnimationFrame(step);
 	}
@@ -128,6 +143,34 @@
 			window.removeEventListener('scroll', onScroll);
 			window.removeEventListener('resize', onScroll);
 		};
+	});
+
+	// ── TEMP back-to-top diagnostic (gated behind ?bttdebug) — remove after diagnosis.
+	// A capture-phase document click listener records EVERY click regardless of what
+	// swallows it, so we can see, on a failing click, whether a click fires at all and
+	// whether it lands on the button or on something overlaying it.
+	const bttDebug = $derived(page.url.searchParams.has('bttdebug'));
+	let bttLog = $state<string[]>([]);
+	function blog(msg: string) {
+		const t = (performance.now() / 1000).toFixed(2).padStart(7, ' ');
+		bttLog = [...bttLog.slice(-16), `${t}  ${msg}`];
+	}
+	$effect(() => {
+		if (!bttDebug) return;
+		const onClick = (e: MouseEvent) => {
+			const el = e.target as Element | null;
+			const tag = el ? el.tagName.toLowerCase() : 'null';
+			const onBtt = el ? !!el.closest('[aria-label="Back to top"]') : false;
+			// What is actually painted at the click point? Catches an invisible overlay.
+			const topEl = document.elementFromPoint(e.clientX, e.clientY);
+			const topTag = topEl ? topEl.tagName.toLowerCase() : 'null';
+			const topBtt = topEl ? !!topEl.closest('[aria-label="Back to top"]') : false;
+			blog(
+				`click <${tag}> ${onBtt ? 'ON-BTT' : 'off'} | topmost <${topTag}> ${topBtt ? 'ON-BTT' : 'off'} | y=${Math.round(window.scrollY)}`
+			);
+		};
+		document.addEventListener('click', onClick, true);
+		return () => document.removeEventListener('click', onClick, true);
 	});
 
 	const menuItem =
@@ -380,6 +423,26 @@
 			/>
 		</svg>
 	</button>
+
+	<!-- TEMP back-to-top diagnostic panel (only with ?bttdebug). Remove after diagnosis. -->
+	{#if bttDebug}
+		<div
+			class="fixed top-24 left-2 z-200 max-h-[70vh] max-w-[94vw] overflow-auto rounded bg-black/90 p-2 font-mono text-[11px] leading-snug whitespace-pre text-emerald-300 shadow-xl"
+		>
+			<div class="mb-1 flex items-center gap-2">
+				<span class="font-bold text-white">btt-debug</span>
+				<button
+					type="button"
+					class="rounded bg-white/20 px-1.5 text-white"
+					onclick={() => (bttLog = [])}>clear</button
+				>
+			</div>
+			{#each bttLog as line}<div>{line}</div>{/each}
+			{#if bttLog.length === 0}<div class="text-white/50">
+					scroll down &amp; click the button…
+				</div>{/if}
+		</div>
+	{/if}
 
 	<!-- App-wide outcome notifications; rendered once here, never per page. -->
 	<ToastContainer />
