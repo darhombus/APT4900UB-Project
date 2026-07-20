@@ -243,27 +243,48 @@
 								</div>
 							</details>
 						{:else}
-							<a
-								href="/login"
-								class="inline-flex h-10 items-center gap-1.5 rounded-control px-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-							>
-								<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-									<circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
-									<path
-										d="M4.5 16.5a5.5 5.5 0 0 1 11 0"
-										stroke="currentColor"
-										stroke-width="1.6"
-										stroke-linecap="round"
-									/>
-								</svg>
-								Log in
-							</a>
-							<a
-								href="/signup"
-								class="inline-flex h-10 flex-none items-center rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90"
-							>
-								Sign up
-							</a>
+							<!-- Logged out: one account icon menu (mirrors the logged-in one) → Log in / Sign up. -->
+							<details use:autoClose class="group relative">
+								<summary
+									aria-label="Log in or sign up"
+									class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-control px-2 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none [&::-webkit-details-marker]:hidden"
+								>
+									<svg
+										class="h-5 w-5 text-white"
+										viewBox="0 0 20 20"
+										fill="none"
+										aria-hidden="true"
+									>
+										<circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
+										<path
+											d="M4.5 16.5a5.5 5.5 0 0 1 11 0"
+											stroke="currentColor"
+											stroke-width="1.6"
+											stroke-linecap="round"
+										/>
+									</svg>
+									<svg
+										class="h-4 w-4 text-white/80 transition-transform group-open:rotate-180"
+										viewBox="0 0 20 20"
+										fill="none"
+										aria-hidden="true"
+									>
+										<path
+											d="M6 8l4 4 4-4"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</summary>
+								<div
+									class="absolute right-0 mt-2 w-44 rounded-card border border-border bg-surface p-1 shadow-menu"
+								>
+									<a href="/login" class={menuItem} onclick={closeMenu}>Log in</a>
+									<a href="/signup" class={menuItem} onclick={closeMenu}>Sign up</a>
+								</div>
+							</details>
 						{/if}
 					</div>
 				</div>
