@@ -83,6 +83,15 @@
 		window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
 	}
 
+	// The floating back-to-top button appears only once the user has scrolled down.
+	let scrolled = $state(false);
+	$effect(() => {
+		const onScroll = () => (scrolled = window.scrollY > 300);
+		onScroll();
+		window.addEventListener('scroll', onScroll, { passive: true });
+		return () => window.removeEventListener('scroll', onScroll);
+	});
+
 	const menuItem =
 		'block rounded-control px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-page hover:text-ink';
 
@@ -261,24 +270,6 @@
 		{@render children()}
 	</div>
 
-	<!-- Slim back-to-top strip in the band's colour: an up-arrow that scrolls to the top. -->
-	<button
-		type="button"
-		onclick={scrollToTop}
-		aria-label="Back to top"
-		class="flex w-full items-center justify-center bg-brand-strong py-3 text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset focus-visible:outline-none"
-	>
-		<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-			<path
-				d="M10 15V6M6 10l4-4 4 4"
-				stroke="currentColor"
-				stroke-width="1.8"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/>
-		</svg>
-	</button>
-
 	<footer class="border-t border-border bg-surface">
 		<div
 			class="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 sm:flex-row sm:items-center sm:justify-between"
@@ -292,6 +283,28 @@
 			<p class="text-sm text-subtle">© {year} My Soko</p>
 		</div>
 	</footer>
+
+	<!-- Floating back-to-top: a circular up-to-top icon, shown once scrolled down. -->
+	{#if scrolled}
+		<button
+			type="button"
+			onclick={scrollToTop}
+			aria-label="Back to top"
+			class="fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
+		>
+			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path d="M6 5h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+				<path d="M12 20V9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+				<path
+					d="M7 14l5-5 5 5"
+					stroke="currentColor"
+					stroke-width="1.9"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+		</button>
+	{/if}
 
 	<!-- App-wide outcome notifications; rendered once here, never per page. -->
 	<ToastContainer />
