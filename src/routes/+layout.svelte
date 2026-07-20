@@ -333,27 +333,30 @@
 		</div>
 	</footer>
 
-	<!-- Floating back-to-top: a circular up-to-top icon, shown once scrolled down. -->
-	{#if scrolled}
-		<button
-			type="button"
-			onclick={scrollToTop}
-			aria-label="Back to top"
-			class="fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none sm:bottom-2"
-		>
-			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-				<path d="M6 5h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-				<path d="M12 20V9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-				<path
-					d="M7 14l5-5 5 5"
-					stroke="currentColor"
-					stroke-width="1.9"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-		</button>
-	{/if}
+	<!-- Floating back-to-top: a circular up-to-top icon, shown once scrolled down. It
+	     is ALWAYS mounted and only toggles visibility via classes (opacity + pointer
+	     events); mounting/unmounting it under a smooth scroll made repeated clicks land
+	     on an element mid-transition, so they intermittently did nothing. -->
+	<button
+		type="button"
+		onclick={scrollToTop}
+		aria-label="Back to top"
+		aria-hidden={!scrolled}
+		tabindex={scrolled ? 0 : -1}
+		class={`fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition duration-200 hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none sm:bottom-2 ${scrolled ? 'opacity-100' : 'pointer-events-none translate-y-2 opacity-0'}`}
+	>
+		<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+			<path d="M6 5h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+			<path d="M12 20V9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+			<path
+				d="M7 14l5-5 5 5"
+				stroke="currentColor"
+				stroke-width="1.9"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+		</svg>
+	</button>
 
 	<!-- App-wide outcome notifications; rendered once here, never per page. -->
 	<ToastContainer />
