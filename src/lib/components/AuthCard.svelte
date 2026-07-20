@@ -16,11 +16,11 @@
 	let { title, subtitle, children }: Props = $props();
 </script>
 
-<main class="mx-auto my-auto w-full max-w-md px-4 py-4">
-	<Card>
+<main class="mx-auto my-auto w-full max-w-md px-4 py-2.5">
+	<Card padded={false} class="p-4">
 		<h1 class="font-display text-2xl font-bold text-ink">{title}</h1>
 		{#if subtitle}<p class="mt-1 text-sm text-muted">{subtitle}</p>{/if}
-		<div class="mt-6">
+		<div class="mt-4">
 			{@render children()}
 		</div>
 	</Card>
