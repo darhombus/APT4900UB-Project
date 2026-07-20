@@ -3,7 +3,8 @@
 
 	interface Props {
 		variant?: 'primary' | 'secondary' | 'ghost' | 'destructive';
-		size?: 'sm' | 'md' | 'lg';
+		/** `icon` is a square, padding-free button for a single glyph (pair with aria-label). */
+		size?: 'sm' | 'md' | 'lg' | 'icon';
 		loading?: boolean;
 		disabled?: boolean;
 		type?: 'button' | 'submit' | 'reset';
@@ -39,7 +40,8 @@
 	const sizes: Record<NonNullable<Props['size']>, string> = {
 		sm: 'h-9 px-3 text-sm',
 		md: 'h-11 px-4 text-sm',
-		lg: 'h-12 px-5 text-base'
+		lg: 'h-12 px-5 text-base',
+		icon: 'h-9 w-9 text-sm'
 	};
 
 	const isDisabled = $derived(disabled || loading);
