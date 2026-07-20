@@ -88,13 +88,23 @@
 		window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
 	}
 
-	// The floating back-to-top button appears only once the user has scrolled down.
+	// The floating back-to-top button appears once the user has scrolled down. The
+	// trigger is adaptive — ~40% of the scrollable distance, capped at 300px — so it
+	// also shows on tall desktop monitors where the short 4-col grid scrolls little,
+	// while staying hidden on pages that barely scroll at all.
 	let scrolled = $state(false);
 	$effect(() => {
-		const onScroll = () => (scrolled = window.scrollY > 300);
+		const onScroll = () => {
+			const max = document.documentElement.scrollHeight - window.innerHeight;
+			scrolled = max > 40 && window.scrollY > Math.min(300, max * 0.4);
+		};
 		onScroll();
 		window.addEventListener('scroll', onScroll, { passive: true });
-		return () => window.removeEventListener('scroll', onScroll);
+		window.addEventListener('resize', onScroll, { passive: true });
+		return () => {
+			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('resize', onScroll);
+		};
 	});
 
 	const menuItem =
