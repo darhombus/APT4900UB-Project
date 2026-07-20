@@ -23,6 +23,7 @@ export async function runSearch(
 	if (query.args.min_price !== null) args.min_price = query.args.min_price;
 	if (query.args.max_price !== null) args.max_price = query.args.max_price;
 	if (query.args.conditions !== null) args.conditions = query.args.conditions;
+	if (query.args.location !== null) args.location = query.args.location;
 
 	const { data, count, error } = await supabase
 		.rpc('search_listings', args, { count: 'exact' })

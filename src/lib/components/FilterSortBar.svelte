@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { navigating } from '$app/state';
 	import { Button, Input, Label, Select } from '$lib/components/ui';
-	import { CONDITIONS, conditionLabel } from '$lib/validation/listings';
+	import { CONDITIONS, NAIROBI_AREAS, conditionLabel } from '$lib/validation/listings';
 	import type { SearchParams } from '$lib/search';
 	import { buildFilterUrl, pricePillState, sortFromParams } from '$lib/filter-nav';
 
@@ -79,6 +79,7 @@
 			minPrice: toInt(fd.get('min_price')),
 			maxPrice: toInt(fd.get('max_price')),
 			condition: fd.getAll('condition').map(String) as SearchParams['condition'],
+			location: String(fd.get('location') ?? ''),
 			page: 1
 		};
 		if (showCategory) patch.category = String(fd.get('category') ?? '');
@@ -93,6 +94,11 @@
 			out.push({
 				label: categoryName ?? params.category,
 				url: buildFilterUrl(base, params, { category: '', page: 1 })
+			});
+		if (params.location)
+			out.push({
+				label: params.location,
+				url: buildFilterUrl(base, params, { location: '', page: 1 })
 			});
 		if (params.minPrice !== null)
 			out.push({
@@ -121,6 +127,7 @@
 			minPrice: null,
 			maxPrice: null,
 			condition: [],
+			location: '',
 			page: 1
 		})
 	);
@@ -149,6 +156,16 @@
 				</Select>
 			</div>
 		{/if}
+
+		<div class="w-full lg:w-48">
+			<Label for={`${idPrefix}-location`}>Location</Label>
+			<Select id={`${idPrefix}-location`} name="location" value={params.location}>
+				<option value="">Any location</option>
+				{#each NAIROBI_AREAS as area (area)}
+					<option value={area}>{area}</option>
+				{/each}
+			</Select>
+		</div>
 
 		<div>
 			<Label for={`${idPrefix}-min`}>Price (KSh)</Label>
@@ -187,7 +204,7 @@
 							name="condition"
 							value={c.value}
 							checked={params.condition.includes(c.value)}
-							class="h-4 w-4 rounded-[4px] border-border text-brand focus:ring-2 focus:ring-brand/30"
+							class="h-4 w-4 rounded-sm border-border text-brand focus:ring-2 focus:ring-brand/30"
 						/>
 						{c.label}
 					</label>

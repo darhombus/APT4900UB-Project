@@ -23,11 +23,16 @@
 			minPrice: null,
 			maxPrice: null,
 			condition: [],
+			location: '',
 			page: 1
 		})
 	);
 	const hasFilters = $derived(
-		p.category !== '' || p.minPrice !== null || p.maxPrice !== null || p.condition.length > 0
+		p.category !== '' ||
+			p.minPrice !== null ||
+			p.maxPrice !== null ||
+			p.condition.length > 0 ||
+			p.location !== ''
 	);
 
 	const pageItems = $derived.by(() => {

@@ -41,6 +41,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			min_price: sp.minPrice,
 			max_price: sp.maxPrice,
 			conditions: sp.condition.length ? sp.condition : null,
+			location: sp.location || null,
 			sort: sp.sort
 		},
 		from,
@@ -62,6 +63,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		sort: sp.sort,
 		minPrice: sp.minPrice,
 		maxPrice: sp.maxPrice,
-		condition: sp.condition
+		condition: sp.condition,
+		location: sp.location
 	};
 };

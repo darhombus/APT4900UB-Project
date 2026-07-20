@@ -536,6 +536,7 @@ export type Database = {
         Args: {
           category_ids?: string[]
           conditions?: Database["public"]["Enums"]["item_condition"][]
+          location?: string
           max_price?: number
           min_price?: number
           q?: string[]

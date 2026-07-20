@@ -34,6 +34,7 @@ export function buildFilterUrl(
 	if (next.minPrice !== null) parts.push(`min_price=${next.minPrice}`);
 	if (next.maxPrice !== null) parts.push(`max_price=${next.maxPrice}`);
 	for (const c of next.condition) parts.push(`condition=${c}`);
+	if (next.location) parts.push(`location=${enc(next.location)}`);
 	if (next.sort !== defaultSort(next.q !== '')) parts.push(`sort=${next.sort}`);
 	if (next.page > 1) parts.push(`page=${next.page}`);
 	return parts.length ? `${base}?${parts.join('&')}` : base;

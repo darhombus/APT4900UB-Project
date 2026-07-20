@@ -17,6 +17,7 @@
 		minPrice: data.minPrice,
 		maxPrice: data.maxPrice,
 		condition: data.condition,
+		location: data.location,
 		sort: data.sort,
 		page: data.page
 	});

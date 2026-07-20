@@ -1,4 +1,9 @@
-import { CONDITIONS, type CategoryTree, type ConditionValue } from '$lib/validation/listings';
+import {
+	CONDITIONS,
+	NAIROBI_AREAS,
+	type CategoryTree,
+	type ConditionValue
+} from '$lib/validation/listings';
 
 /**
  * Pure search query composition — parses the URL params into a normalized shape
@@ -23,6 +28,7 @@ export const SEARCH_SORTS: readonly SearchSort[] = [
 ];
 
 const CONDITION_VALUES = new Set<string>(CONDITIONS.map((c) => c.value));
+const LOCATION_VALUES = new Set<string>(NAIROBI_AREAS);
 
 /** Normalized, validated search state — the single source of truth for the page. */
 export interface SearchParams {
@@ -31,6 +37,7 @@ export interface SearchParams {
 	minPrice: number | null;
 	maxPrice: number | null;
 	condition: ConditionValue[];
+	location: string; // a NAIROBI_AREAS value, or '' for any
 	sort: SearchSort;
 	page: number;
 }
@@ -43,6 +50,7 @@ export interface SearchQuery {
 		min_price: number | null;
 		max_price: number | null;
 		conditions: ConditionValue[] | null;
+		location: string | null; // exact-match area; null = any
 		sort: SearchSort;
 	};
 	from: number;
@@ -94,6 +102,9 @@ export function parseSearchParams(sp: URLSearchParams): SearchParams {
 	const condition = [...new Set(sp.getAll('condition'))].filter((c) =>
 		CONDITION_VALUES.has(c)
 	) as ConditionValue[];
+	// Only accept a location from the fixed list — an unknown value is no filter.
+	const locationRaw = (sp.get('location') ?? '').trim();
+	const location = LOCATION_VALUES.has(locationRaw) ? locationRaw : '';
 	const page = Math.max(1, Math.floor(Number(sp.get('page')) || 1));
 
 	const sortRaw = sp.get('sort') ?? '';
@@ -111,6 +122,7 @@ export function parseSearchParams(sp: URLSearchParams): SearchParams {
 		minPrice: toPositiveInt(sp.get('min_price')),
 		maxPrice: toPositiveInt(sp.get('max_price')),
 		condition,
+		location,
 		sort,
 		page
 	};
@@ -126,6 +138,7 @@ export function composeSearch(params: SearchParams, tree: CategoryTree[]): Searc
 			min_price: params.minPrice,
 			max_price: params.maxPrice,
 			conditions: params.condition.length ? params.condition : null,
+			location: params.location || null,
 			sort: params.sort
 		},
 		from,
