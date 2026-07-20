@@ -81,11 +81,34 @@
 	/**
 	 * Scroll to the very top. A plain `#top` anchor doesn't work here: it targets the
 	 * sticky header, which is already pinned in view, so the browser scrolls nowhere.
-	 * Scrolling the window directly is reliable. Reduced motion → instant, not smooth.
+	 *
+	 * The animation is driven by requestAnimationFrame rather than the native
+	 * `scrollTo({ behavior: 'smooth' })`. Native smooth scroll is intermittently
+	 * dropped in desktop Chrome/Edge — a second smooth scroll to the same target, or
+	 * one issued while wheel momentum is still settling, is silently cancelled, which
+	 * showed up as "click works, next click does nothing, the one after works". Setting
+	 * the position ourselves each frame can't be deduped or pre-empted by that
+	 * scheduler, so every click lands. Reduced motion → jump instantly.
 	 */
+	let scrollAnim: number | null = null;
 	function scrollToTop() {
-		const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-		window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+		if (scrollAnim !== null) cancelAnimationFrame(scrollAnim);
+		const start = window.scrollY;
+		if (start <= 0) return;
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			window.scrollTo(0, 0);
+			scrollAnim = null;
+			return;
+		}
+		const startTime = performance.now();
+		const duration = Math.min(600, Math.max(250, start * 0.6));
+		const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+		const step = (now: number) => {
+			const t = Math.min(1, (now - startTime) / duration);
+			window.scrollTo(0, Math.round(start * (1 - easeOutCubic(t))));
+			scrollAnim = t < 1 ? requestAnimationFrame(step) : null;
+		};
+		scrollAnim = requestAnimationFrame(step);
 	}
 
 	// The floating back-to-top button appears once the user has scrolled down. The
