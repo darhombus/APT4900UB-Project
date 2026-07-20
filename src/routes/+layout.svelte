@@ -142,11 +142,11 @@
 
 <div class="flex min-h-screen flex-col">
 	{#if bareAuth}
-		<!-- Minimal auth header: just the wordmark, a link back to the homepage. -->
-		<header class="border-b border-border bg-surface">
-			<div class="mx-auto max-w-6xl px-4 py-4">
-				<a href="/" class="font-display text-xl font-bold tracking-tight">
-					<span class="text-ink">My</span><span class="text-brand">Soko</span>
+		<!-- Minimal auth header: the top-bar band + wordmark, without search/nav. -->
+		<header class="bg-brand-strong text-white">
+			<div class="mx-auto flex max-w-6xl items-center px-4 py-2.5">
+				<a href="/" class="font-display text-lg font-bold tracking-tight text-white sm:text-xl">
+					My<span class="text-white/75">Soko</span>
 				</a>
 			</div>
 		</header>
