@@ -17,8 +17,7 @@ export const actions: Actions = {
 			fullName: String(form.get('fullName') ?? ''),
 			email: String(form.get('email') ?? ''),
 			phone: String(form.get('phone') ?? ''),
-			password: String(form.get('password') ?? ''),
-			confirmPassword: String(form.get('confirmPassword') ?? '')
+			password: String(form.get('password') ?? '')
 		};
 
 		const parsed = signupSchema.safeParse(raw);

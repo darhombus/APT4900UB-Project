@@ -151,8 +151,7 @@
 			</div>
 			<div>
 				<Label for="sg-area" optional>Location</Label>
-				<Select id="sg-area">
-					<option value="">Choose an area…</option>
+				<Select id="sg-area" placeholder="Choose an area…">
 					<option>Westlands</option>
 					<option>Kasarani</option>
 					<option>Karen</option>
@@ -160,8 +159,7 @@
 			</div>
 			<div>
 				<Label for="sg-cond">Condition</Label>
-				<Select id="sg-cond" error="Choose a condition">
-					<option value="">Choose…</option>
+				<Select id="sg-cond" error="Choose a condition" placeholder="Choose…">
 					<option>Brand new</option>
 					<option>Used — good</option>
 				</Select>

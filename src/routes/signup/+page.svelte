@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { AuthCard } from '$lib/components';
-	import { Alert, Button, Input, Label } from '$lib/components/ui';
+	import { Button, Input, Label, PasswordInput } from '$lib/components/ui';
+	import { notifyFromResult } from '$lib/toast.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -16,6 +18,14 @@
 			phone: ''
 		}
 	);
+
+	// Form-level failures surface as a toast; field errors stay inline below.
+	const onSubmit: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			notifyFromResult(result);
+		};
 </script>
 
 <svelte:head><title>Sign up · MySoko</title></svelte:head>
@@ -30,11 +40,7 @@
 	</AuthCard>
 {:else}
 	<AuthCard title="Create your account" subtitle="Buy and sell across Kenya.">
-		{#if form && 'formError' in form && form.formError}
-			<Alert variant="error" class="mb-4">{form.formError}</Alert>
-		{/if}
-
-		<form method="POST" use:enhance class="space-y-4">
+		<form method="POST" use:enhance={onSubmit} class="space-y-2.5">
 			<div>
 				<Label for="fullName">Full name</Label>
 				<Input
@@ -74,30 +80,18 @@
 
 			<div>
 				<Label for="password">Password</Label>
-				<Input
+				<PasswordInput
 					id="password"
 					name="password"
-					type="password"
 					autocomplete="new-password"
 					error={errors.password}
-				/>
-			</div>
-
-			<div>
-				<Label for="confirmPassword">Confirm password</Label>
-				<Input
-					id="confirmPassword"
-					name="confirmPassword"
-					type="password"
-					autocomplete="new-password"
-					error={errors.confirmPassword}
 				/>
 			</div>
 
 			<Button type="submit" class="w-full">Create account</Button>
 		</form>
 
-		<p class="mt-4 text-center text-sm text-muted">
+		<p class="mt-3 text-center text-sm text-muted">
 			Already have an account?
 			<a href="/login" class="font-medium text-brand hover:underline">Log in</a>
 		</p>
