@@ -140,7 +140,9 @@
 	{/if}
 {/snippet}
 
-<div class="flex min-h-screen flex-col">
+<!-- Auth pages are pinned to the viewport (header + footer always visible, form
+     centered between them); every other page grows and scrolls normally. -->
+<div class={`flex flex-col ${bareAuth ? 'h-dvh' : 'min-h-screen'}`}>
 	{#if bareAuth}
 		<!-- Minimal auth header: the top-bar band + wordmark, without search/nav. -->
 		<header class="bg-brand-strong text-white">
@@ -282,7 +284,7 @@
 		/>
 	{/if}
 
-	<div class={`flex-1 ${bareAuth ? 'flex flex-col justify-center' : ''}`}>
+	<div class={`flex-1 ${bareAuth ? 'flex min-h-0 flex-col overflow-y-auto' : ''}`}>
 		{@render children()}
 	</div>
 
@@ -294,7 +296,7 @@
 				<span class="font-display font-bold tracking-tight text-ink"
 					>My<span class="text-brand">Soko</span></span
 				>
-				<span class="ml-1.5">Kenya's marketplace · Nairobi</span>
+				<span class="ml-1.5">Kenya's marketplace</span>
 			</p>
 			<p>© {year} My Soko</p>
 		</div>
