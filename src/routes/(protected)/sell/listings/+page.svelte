@@ -99,19 +99,13 @@
 			aria-hidden="true"
 		>
 			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none">
-				<circle cx="12" cy="17" r="1.6" fill="currentColor" />
+				<rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.7" />
 				<path
-					d="M8 13a5.5 5.5 0 0 1 8 0"
+					d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"
 					stroke="currentColor"
-					stroke-width="1.8"
-					stroke-linecap="round"
+					stroke-width="1.7"
 				/>
-				<path
-					d="M5.5 10a9 9 0 0 1 13 0"
-					stroke="currentColor"
-					stroke-width="1.8"
-					stroke-linecap="round"
-				/>
+				<path d="M3 12h18" stroke="currentColor" stroke-width="1.7" />
 			</svg>
 		</div>
 	{:else}
@@ -194,12 +188,36 @@
 			<input type="hidden" name="id" value={l.id} />
 			<Button
 				type="submit"
-				size="sm"
+				size="icon"
 				variant="destructive"
 				loading={isPending(l.id, 'delete')}
 				disabled={!!pending}
+				aria-label="Delete"
+				title="Delete"
 			>
-				Delete
+				{#if !isPending(l.id, 'delete')}
+					<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path d="M4 7h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+						<path
+							d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"
+							stroke="currentColor"
+							stroke-width="1.7"
+						/>
+						<path
+							d="M6 7l1 12a2 2 0 0 0 2 1.9h6a2 2 0 0 0 2-1.9L18 7"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+						<path
+							d="M10 11v6M14 11v6"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+						/>
+					</svg>
+				{/if}
 			</Button>
 		</form>
 	{/if}
