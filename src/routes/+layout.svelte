@@ -81,11 +81,34 @@
 	/**
 	 * Scroll to the very top. A plain `#top` anchor doesn't work here: it targets the
 	 * sticky header, which is already pinned in view, so the browser scrolls nowhere.
-	 * Scrolling the window directly is reliable. Reduced motion → instant, not smooth.
+	 *
+	 * The animation is driven by requestAnimationFrame rather than the native
+	 * `scrollTo({ behavior: 'smooth' })`. Native smooth scroll is intermittently
+	 * dropped in desktop Chrome/Edge — a second smooth scroll to the same target, or
+	 * one issued while wheel momentum is still settling, is silently cancelled, which
+	 * showed up as "click works, next click does nothing, the one after works". Setting
+	 * the position ourselves each frame can't be deduped or pre-empted by that
+	 * scheduler, so every click lands. Reduced motion → jump instantly.
 	 */
+	let scrollAnim: number | null = null;
 	function scrollToTop() {
-		const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-		window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+		if (scrollAnim !== null) cancelAnimationFrame(scrollAnim);
+		const start = window.scrollY;
+		if (start <= 0) return;
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			window.scrollTo(0, 0);
+			scrollAnim = null;
+			return;
+		}
+		const startTime = performance.now();
+		const duration = Math.min(600, Math.max(250, start * 0.6));
+		const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+		const step = (now: number) => {
+			const t = Math.min(1, (now - startTime) / duration);
+			window.scrollTo(0, Math.round(start * (1 - easeOutCubic(t))));
+			scrollAnim = t < 1 ? requestAnimationFrame(step) : null;
+		};
+		scrollAnim = requestAnimationFrame(step);
 	}
 
 	// The floating back-to-top button appears once the user has scrolled down. The
@@ -333,27 +356,30 @@
 		</div>
 	</footer>
 
-	<!-- Floating back-to-top: a circular up-to-top icon, shown once scrolled down. -->
-	{#if scrolled}
-		<button
-			type="button"
-			onclick={scrollToTop}
-			aria-label="Back to top"
-			class="fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
-		>
-			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-				<path d="M6 5h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-				<path d="M12 20V9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-				<path
-					d="M7 14l5-5 5 5"
-					stroke="currentColor"
-					stroke-width="1.9"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-		</button>
-	{/if}
+	<!-- Floating back-to-top: a circular up-to-top icon, shown once scrolled down. It
+	     is ALWAYS mounted and only toggles visibility via classes (opacity + pointer
+	     events); mounting/unmounting it under a smooth scroll made repeated clicks land
+	     on an element mid-transition, so they intermittently did nothing. -->
+	<button
+		type="button"
+		onclick={scrollToTop}
+		aria-label="Back to top"
+		aria-hidden={!scrolled}
+		tabindex={scrolled ? 0 : -1}
+		class={`fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition duration-200 hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none sm:bottom-2 ${scrolled ? 'opacity-100' : 'pointer-events-none translate-y-2 opacity-0'}`}
+	>
+		<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+			<path d="M6 5h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+			<path d="M12 20V9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+			<path
+				d="M7 14l5-5 5 5"
+				stroke="currentColor"
+				stroke-width="1.9"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+		</svg>
+	</button>
 
 	<!-- App-wide outcome notifications; rendered once here, never per page. -->
 	<ToastContainer />
