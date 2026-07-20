@@ -28,7 +28,8 @@ export const actions: Actions = {
 			return fail(400, { formError: error.message });
 		}
 
-		// Password changed; the recovery session is still valid, so land them in.
-		redirect(303, '/account');
+		// Password changed; the recovery session is still valid, so land them on the
+		// browse/listings page (same default destination as a normal login).
+		redirect(303, '/');
 	}
 };

@@ -5,10 +5,12 @@
 	import '@fontsource-variable/inter';
 	import '@fontsource-variable/space-grotesk';
 	import favicon from '$lib/assets/favicon.svg';
-	// Import the component directly (not via the $lib/components barrel) so the root
+	// Import components directly (not via the $lib/components barrel) so the root
 	// layout — loaded on every page — doesn't pull the heavy ListingForm/
 	// ImageUploader into its client bundle and slow hydration.
 	import SearchBar from '$lib/components/SearchBar.svelte';
+	import CategoryDrawer from '$lib/components/CategoryDrawer.svelte';
+	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -16,8 +18,22 @@
 	let { data, children } = $props();
 	let { session, supabase } = $derived(data);
 	const profile = $derived(data.profile);
+	const isSeller = $derived(data.isSeller);
+	const categoryTree = $derived(data.categoryTree);
 
 	const year = new Date().getFullYear();
+
+	// ── Slide-out category sidebar ──────────────────────────────────────────────
+	let sidebarOpen = $state(false);
+	let hamburgerEl = $state<HTMLButtonElement | null>(null);
+	function openSidebar() {
+		sidebarOpen = true;
+	}
+	// Closing returns focus to the hamburger (the drawer's trigger).
+	function closeSidebar() {
+		sidebarOpen = false;
+		hamburgerEl?.focus();
+	}
 
 	function initials(name: string | null | undefined): string {
 		if (!name) return '?';
@@ -30,7 +46,7 @@
 	}
 
 	/**
-	 * The header menus are native <details> disclosures, so they open/close with no
+	 * The account menu is a native <details> disclosure, so it opens/closes with no
 	 * JavaScript — important on low-end Android and immune to hydration timing. This
 	 * action is pure progressive enhancement: when JS is available it closes an open
 	 * menu on an outside click or Escape.
@@ -56,11 +72,6 @@
 	function closeMenu(event: Event) {
 		(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
 	}
-
-	const navLinks = [
-		{ href: '/', label: 'Browse' },
-		{ href: '/sell', label: 'Sell' }
-	];
 
 	const menuItem =
 		'block rounded-control px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-page hover:text-ink';
@@ -106,86 +117,20 @@
 {/snippet}
 
 <div class="flex min-h-screen flex-col">
-	<header class="sticky top-0 z-40 border-b border-border bg-surface">
-		<nav class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-			<!-- Wordmark -->
-			<a href="/" class="font-display text-xl font-bold tracking-tight">
-				<span class="text-ink">My</span><span class="text-brand">Soko</span>
-			</a>
-
-			<!-- Primary nav (desktop) -->
-			<div class="hidden items-center gap-1 md:flex">
-				{#each navLinks as link (link.href)}
-					<a
-						href={link.href}
-						class="rounded-control px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-page hover:text-ink"
-					>
-						{link.label}
-					</a>
-				{/each}
-			</div>
-
-			<!-- Search (desktop) -->
-			<SearchBar compact class="hidden md:flex md:max-w-xs md:flex-1" />
-
-			<!-- Account area (desktop) -->
-			<div class="hidden items-center gap-3 md:flex">
-				{#if session}
-					<details use:autoClose class="group relative">
-						<summary
-							aria-label="Account menu"
-							class="flex cursor-pointer list-none items-center gap-2 rounded-pill p-0.5 pr-1 transition-colors hover:bg-page focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none [&::-webkit-details-marker]:hidden"
-						>
-							{@render avatar('h-8 w-8')}
-							<svg
-								class="h-4 w-4 text-subtle transition-transform group-open:rotate-180"
-								viewBox="0 0 20 20"
-								fill="none"
-								aria-hidden="true"
-							>
-								<path
-									d="M6 8l4 4 4-4"
-									stroke="currentColor"
-									stroke-width="1.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-						</summary>
-						<div
-							class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
-						>
-							<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
-							<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
-							<div class="my-1 border-t border-border"></div>
-							<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
-								<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
-							</form>
-						</div>
-					</details>
-				{:else}
-					<a
-						href="/login"
-						class="rounded-control px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-page hover:text-ink"
-					>
-						Log in
-					</a>
-					<a
-						href="/signup"
-						class="inline-flex h-11 items-center justify-center rounded-control bg-brand px-4 text-sm font-medium text-white transition-colors hover:bg-brand-hover"
-					>
-						Sign up
-					</a>
-				{/if}
-			</div>
-
-			<!-- Mobile menu (native disclosure) -->
-			<details use:autoClose class="group md:hidden">
-				<summary
-					aria-label="Menu"
-					class="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-control text-ink transition-colors hover:bg-page [&::-webkit-details-marker]:hidden"
+	<header id="top" class="sticky top-0 z-40 bg-brand-strong text-white">
+		<div class="mx-auto max-w-6xl px-4">
+			<!-- Row 1: menu + logo, (search on desktop), account/auth -->
+			<div class="flex items-center gap-2 py-2.5 sm:gap-3">
+				<button
+					bind:this={hamburgerEl}
+					type="button"
+					onclick={openSidebar}
+					aria-label="Open menu"
+					aria-expanded={sidebarOpen}
+					aria-controls="category-drawer"
+					class="flex h-10 flex-none items-center gap-1.5 rounded-control px-2 text-sm font-medium transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
 				>
-					<svg class="h-6 w-6 group-open:hidden" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<path
 							d="M4 7h16M4 12h16M4 17h16"
 							stroke="currentColor"
@@ -193,70 +138,126 @@
 							stroke-linecap="round"
 						/>
 					</svg>
-					<svg
-						class="hidden h-6 w-6 group-open:block"
-						viewBox="0 0 24 24"
-						fill="none"
-						aria-hidden="true"
-					>
-						<path
-							d="M6 6l12 12M18 6L6 18"
-							stroke="currentColor"
-							stroke-width="1.8"
-							stroke-linecap="round"
-						/>
-					</svg>
-				</summary>
-				<div
-					class="absolute inset-x-0 top-full border-t border-border bg-surface px-4 py-3 shadow-menu"
+					<span class="hidden sm:inline">All</span>
+				</button>
+
+				<a
+					href="/"
+					class="flex-none font-display text-lg font-bold tracking-tight text-white sm:text-xl"
 				>
-					<SearchBar class="mb-3" />
-					<div class="flex flex-col gap-1">
-						{#each navLinks as link (link.href)}
-							<a href={link.href} class={menuItem} onclick={closeMenu}>{link.label}</a>
-						{/each}
-					</div>
-					<div class="my-3 border-t border-border"></div>
+					My<span class="text-white/75">Soko</span>
+				</a>
+
+				<!-- Desktop: search is the dominant central instrument -->
+				<div class="hidden flex-1 md:block">
+					<SearchBar />
+				</div>
+
+				<!-- Mobile: spacer pushes the account cluster to the right -->
+				<div class="flex-1 md:hidden"></div>
+
+				<div class="flex flex-none items-center gap-1">
 					{#if session}
-						<div class="flex items-center gap-3 px-1 pb-2">
-							{@render avatar('h-9 w-9')}
-							<p class="truncate text-sm font-medium text-ink">
-								{profile?.full_name ?? 'Your account'}
-							</p>
-						</div>
-						<div class="flex flex-col gap-1">
-							<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
-							<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
-							<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
-								<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
-							</form>
-						</div>
+						{#if isSeller}
+							<a
+								href="/sell/listings/new"
+								class="hidden h-10 items-center gap-1.5 rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90 sm:inline-flex"
+							>
+								<svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+									<path
+										d="M10 4v12M4 10h12"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/>
+								</svg>
+								New listing
+							</a>
+						{/if}
+						<details use:autoClose class="group relative">
+							<summary
+								aria-label="Account menu"
+								class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none [&::-webkit-details-marker]:hidden"
+							>
+								{@render avatar('h-8 w-8')}
+								<svg
+									class="h-4 w-4 text-white/80 transition-transform group-open:rotate-180"
+									viewBox="0 0 20 20"
+									fill="none"
+									aria-hidden="true"
+								>
+									<path
+										d="M6 8l4 4 4-4"
+										stroke="currentColor"
+										stroke-width="1.5"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</summary>
+							<div
+								class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
+							>
+								<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
+								<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
+								<div class="my-1 border-t border-border"></div>
+								<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
+									<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
+								</form>
+							</div>
+						</details>
 					{:else}
-						<div class="flex flex-col gap-2">
-							<a
-								href="/login"
-								class="inline-flex h-11 items-center justify-center rounded-control border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-page"
-								onclick={closeMenu}
-							>
-								Log in
-							</a>
-							<a
-								href="/signup"
-								class="inline-flex h-11 items-center justify-center rounded-control bg-brand px-4 text-sm font-medium text-white hover:bg-brand-hover"
-								onclick={closeMenu}
-							>
-								Sign up
-							</a>
-						</div>
+						<a
+							href="/login"
+							class="inline-flex h-10 items-center gap-1.5 rounded-control px-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+						>
+							<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+								<circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
+								<path
+									d="M4.5 16.5a5.5 5.5 0 0 1 11 0"
+									stroke="currentColor"
+									stroke-width="1.6"
+									stroke-linecap="round"
+								/>
+							</svg>
+							Log in
+						</a>
+						<a
+							href="/signup"
+							class="inline-flex h-10 flex-none items-center rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90"
+						>
+							Sign up
+						</a>
 					{/if}
 				</div>
-			</details>
-		</nav>
+			</div>
+
+			<!-- Row 2 (mobile only): search on its own full-width line, always visible -->
+			<div class="pb-2.5 md:hidden">
+				<SearchBar />
+			</div>
+		</div>
 	</header>
+
+	<CategoryDrawer
+		open={sidebarOpen}
+		onclose={closeSidebar}
+		{categoryTree}
+		loggedIn={!!session}
+		{profile}
+	/>
 
 	<div class="flex-1">
 		{@render children()}
 	</div>
+
+	<!-- Slim back-to-top strip in the band's colour (no-JS: a plain anchor jump). -->
+	<a
+		href="#top"
+		class="block bg-brand-strong py-3 text-center text-sm font-medium text-white transition-colors hover:bg-brand-hover"
+	>
+		Back to top
+	</a>
 
 	<footer class="border-t border-border bg-surface">
 		<div
@@ -271,4 +272,7 @@
 			<p class="text-sm text-subtle">© {year} My Soko</p>
 		</div>
 	</footer>
+
+	<!-- App-wide outcome notifications; rendered once here, never per page. -->
+	<ToastContainer />
 </div>

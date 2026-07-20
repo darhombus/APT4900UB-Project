@@ -4,3 +4,4 @@ export { default as ImageUploader } from './ImageUploader.svelte';
 export { default as ListingForm } from './ListingForm.svelte';
 export { default as ListingCard } from './ListingCard.svelte';
 export { default as SearchBar } from './SearchBar.svelte';
+export { default as FilterSortBar } from './FilterSortBar.svelte';
