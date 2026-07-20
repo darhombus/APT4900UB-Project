@@ -141,7 +141,16 @@
 {/snippet}
 
 <div class="flex min-h-screen flex-col">
-	{#if !bareAuth}
+	{#if bareAuth}
+		<!-- Minimal auth header: just the wordmark, a link back to the homepage. -->
+		<header class="border-b border-border bg-surface">
+			<div class="mx-auto max-w-6xl px-4 py-4">
+				<a href="/" class="font-display text-xl font-bold tracking-tight">
+					<span class="text-ink">My</span><span class="text-brand">Soko</span>
+				</a>
+			</div>
+		</header>
+	{:else}
 		<header class="sticky top-0 z-40 bg-brand-strong text-white">
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Row 1: menu + logo, (search on desktop), account/auth -->
@@ -273,21 +282,21 @@
 		/>
 	{/if}
 
-	<div class="flex-1">
+	<div class={`flex-1 ${bareAuth ? 'flex flex-col justify-center' : ''}`}>
 		{@render children()}
 	</div>
 
 	<footer class="border-t border-border bg-surface">
 		<div
-			class="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 sm:flex-row sm:items-center sm:justify-between"
+			class="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-sm text-subtle sm:flex-row sm:items-center sm:justify-between"
 		>
-			<div>
-				<span class="font-display text-lg font-bold tracking-tight">
-					<span class="text-ink">My</span><span class="text-brand">Soko</span>
-				</span>
-				<p class="mt-1 text-sm text-subtle">Kenya's marketplace · Nairobi</p>
-			</div>
-			<p class="text-sm text-subtle">© {year} My Soko</p>
+			<p>
+				<span class="font-display font-bold tracking-tight text-ink"
+					>My<span class="text-brand">Soko</span></span
+				>
+				<span class="ml-1.5">Kenya's marketplace · Nairobi</span>
+			</p>
+			<p>© {year} My Soko</p>
 		</div>
 	</footer>
 
