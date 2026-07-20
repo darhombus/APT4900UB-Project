@@ -40,7 +40,7 @@
 	</AuthCard>
 {:else}
 	<AuthCard title="Create your account" subtitle="Buy and sell across Kenya.">
-		<form method="POST" use:enhance={onSubmit} class="space-y-4">
+		<form method="POST" use:enhance={onSubmit} class="space-y-2.5">
 			<div>
 				<Label for="fullName">Full name</Label>
 				<Input
@@ -91,7 +91,7 @@
 			<Button type="submit" class="w-full">Create account</Button>
 		</form>
 
-		<p class="mt-4 text-center text-sm text-muted">
+		<p class="mt-3 text-center text-sm text-muted">
 			Already have an account?
 			<a href="/login" class="font-medium text-brand hover:underline">Log in</a>
 		</p>

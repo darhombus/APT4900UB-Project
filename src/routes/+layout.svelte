@@ -146,7 +146,7 @@
 	{#if bareAuth}
 		<!-- Minimal auth header: the top-bar band + wordmark, without search/nav. -->
 		<header class="bg-brand-strong text-white">
-			<div class="mx-auto flex max-w-6xl items-center px-4 py-2.5">
+			<div class="mx-auto flex max-w-6xl items-center justify-center px-4 py-2">
 				<a href="/" class="font-display text-lg font-bold tracking-tight text-white sm:text-xl">
 					My<span class="text-white/75">Soko</span>
 				</a>
