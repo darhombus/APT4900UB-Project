@@ -16,7 +16,7 @@
 	let { title, subtitle, children }: Props = $props();
 </script>
 
-<main class="mx-auto w-full max-w-md px-4 py-8">
+<main class="mx-auto my-auto w-full max-w-md px-4 py-4">
 	<Card>
 		<h1 class="font-display text-2xl font-bold text-ink">{title}</h1>
 		{#if subtitle}<p class="mt-1 text-sm text-muted">{subtitle}</p>{/if}
