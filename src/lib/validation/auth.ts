@@ -49,18 +49,12 @@ const phone = z
 
 const password = z.string().min(8, 'Password must be at least 8 characters');
 
-export const signupSchema = z
-	.object({
-		fullName: z.string().trim().min(2, 'Enter your full name').max(120, 'Name is too long'),
-		email: z.email('Enter a valid email address'),
-		phone,
-		password,
-		confirmPassword: z.string()
-	})
-	.refine((data) => data.password === data.confirmPassword, {
-		message: 'Passwords do not match',
-		path: ['confirmPassword']
-	});
+export const signupSchema = z.object({
+	fullName: z.string().trim().min(2, 'Enter your full name').max(120, 'Name is too long'),
+	email: z.email('Enter a valid email address'),
+	phone,
+	password
+});
 
 export const profileSchema = z.object({
 	fullName: z.string().trim().min(2, 'Enter your full name').max(120, 'Name is too long'),

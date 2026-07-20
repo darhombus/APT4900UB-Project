@@ -14,13 +14,16 @@ type RpcArgs = Database['public']['Functions']['search_listings']['Args'];
  */
 export async function runSearch(
 	supabase: SupabaseClient<Database>,
-	query: SearchQuery
+	query: SearchQuery,
+	/** subcategory id → name, so photo-less service cards can show their label. */
+	categoryNames?: Map<string, string>
 ): Promise<{ listings: ListingCardData[]; total: number }> {
 	const args: RpcArgs = { q: query.args.q, sort: query.args.sort };
 	if (query.args.category_ids !== null) args.category_ids = query.args.category_ids;
 	if (query.args.min_price !== null) args.min_price = query.args.min_price;
 	if (query.args.max_price !== null) args.max_price = query.args.max_price;
 	if (query.args.conditions !== null) args.conditions = query.args.conditions;
+	if (query.args.location !== null) args.location = query.args.location;
 
 	const { data, count, error } = await supabase
 		.rpc('search_listings', args, { count: 'exact' })
@@ -52,6 +55,8 @@ export async function runSearch(
 			condition: r.condition,
 			published_at: r.published_at,
 			created_at: r.created_at,
+			type: r.type,
+			categoryLabel: categoryNames?.get(r.category_id) ?? null,
 			listing_images: imagesByListing.get(r.id) ?? []
 		})
 	);

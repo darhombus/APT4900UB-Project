@@ -536,9 +536,10 @@ export type Database = {
         Args: {
           category_ids?: string[]
           conditions?: Database["public"]["Enums"]["item_condition"][]
+          location?: string
           max_price?: number
           min_price?: number
-          q?: string
+          q?: string[]
           sort?: string
         }
         Returns: {
@@ -569,10 +570,17 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      soft_delete_listing: { Args: { p_id: string }; Returns: boolean }
     }
     Enums: {
       item_condition: "new" | "used_like_new" | "used_good" | "used_fair"
-      listing_status: "draft" | "active" | "paused" | "sold" | "removed"
+      listing_status:
+        | "draft"
+        | "active"
+        | "paused"
+        | "sold"
+        | "removed"
+        | "deleted"
       listing_type: "product" | "service"
       order_status:
         | "pending_payment"
@@ -717,7 +725,14 @@ export const Constants = {
   public: {
     Enums: {
       item_condition: ["new", "used_like_new", "used_good", "used_fair"],
-      listing_status: ["draft", "active", "paused", "sold", "removed"],
+      listing_status: [
+        "draft",
+        "active",
+        "paused",
+        "sold",
+        "removed",
+        "deleted",
+      ],
       listing_type: ["product", "service"],
       order_status: [
         "pending_payment",

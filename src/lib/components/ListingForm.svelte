@@ -4,16 +4,29 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import type { Database } from '$lib/types/database';
-	import { Alert, Badge, Button, Card, Input, Label, Select, Textarea } from '$lib/components/ui';
+	import {
+		Badge,
+		Button,
+		Card,
+		Combobox,
+		Input,
+		Label,
+		Select,
+		Textarea
+	} from '$lib/components/ui';
 	import { ImageUploader } from '$lib/components';
+	import { toast } from '$lib/toast.svelte';
 	import {
 		CONDITIONS,
 		NAIROBI_AREAS,
 		findSubcategory,
 		isServiceTop,
 		formatThousands,
+		draftListingSchema,
+		publishListingSchema,
 		type CategoryTree
 	} from '$lib/validation/listings';
+	import { fieldErrors } from '$lib/validation/auth';
 
 	type ListingStatus = Database['public']['Enums']['listing_status'];
 
@@ -111,9 +124,10 @@
 	// row offers a single "Save changes" that never changes its status.
 	const isDraftMode = $derived(!listing || listing.status === 'draft');
 
-	const errors = $derived<Record<string, string>>(form?.errors ?? {});
-	const formError = $derived(form?.formError ?? null);
-	const savedStatus = $derived(form?.success ? (form.status ?? null) : null);
+	// Client validation errors take precedence once a submit is attempted; the
+	// server's `form.errors` still drive the no-JS path and any server-only failure.
+	let clientErrors = $state<Record<string, string> | null>(null);
+	const errors = $derived<Record<string, string>>(clientErrors ?? form?.errors ?? {});
 
 	// When a lazy draft save returns an id, adopt it so the uploader can attach.
 	$effect(() => {
@@ -137,12 +151,85 @@
 		priceDisplay = formatThousands(priceDisplay);
 	}
 
-	const submit: SubmitFunction = ({ action }) => {
-		submitting = action.search.includes('saveDraft') ? 'draft' : 'publish';
+	// Mirror the server's field validation in the browser so an invalid form never
+	// leaves it: the same zod schema + category resolution + publish-goods rules
+	// (all pure), over state the component already holds.
+	function validateClient(intent: 'draft' | 'publish'): Record<string, string> {
+		const raw = {
+			title,
+			description,
+			price: priceDisplay,
+			categoryId: selectedSubId,
+			locationArea,
+			condition
+		};
+		const schema = intent === 'publish' ? publishListingSchema : draftListingSchema;
+		const parsed = schema.safeParse(raw);
+		const errs: Record<string, string> = parsed.success ? {} : fieldErrors(parsed.error);
+
+		// The category must resolve to a real subcategory (the client holds the tree).
+		const match = selectedSubId ? findSubcategory(categoryTree, selectedSubId) : null;
+		if (!match) errs.categoryId ??= selectedSubId ? 'Choose a subcategory' : 'Choose a category';
+
+		// The goods condition + at-least-one-photo publish rules deliberately stay
+		// server-side: the photo count mirrors async uploader state, and the server
+		// checks the DB authoritatively — so the client sticks to the synchronous,
+		// reliable zod schema (which is what the PRD's fast-fail is about).
+		return errs;
+	}
+
+	// Field ids in visual order, so focus lands on the first invalid one.
+	const FOCUS_ID: Record<string, string> = {
+		title: 'title',
+		categoryId: 'categoryId',
+		condition: 'condition',
+		price: 'price',
+		description: 'description',
+		locationArea: 'location'
+	};
+	const FIELD_ORDER = ['title', 'categoryId', 'condition', 'price', 'description', 'locationArea'];
+	function focusFirstError(errs: Record<string, string>) {
+		for (const key of FIELD_ORDER) {
+			if (!errs[key]) continue;
+			const el = document.getElementById(FOCUS_ID[key]);
+			if (el instanceof HTMLElement) {
+				el.focus({ preventScroll: true });
+				el.scrollIntoView({ block: 'center' });
+			}
+			return;
+		}
+	}
+
+	const submit: SubmitFunction = ({ action, cancel }) => {
+		const intent = action.search.includes('saveDraft') ? 'draft' : 'publish';
+
+		// Fast-fail: an invalid form never leaves the browser — render inline errors
+		// immediately and move focus to the first invalid field.
+		const errs = validateClient(intent);
+		if (Object.keys(errs).length > 0) {
+			clientErrors = errs;
+			focusFirstError(errs);
+			cancel();
+			return;
+		}
+		// Passed the client checks — defer to the server for any residual field error
+		// (e.g. the goods photo rule), which then shows via `form.errors`.
+		clientErrors = null;
+
+		submitting = intent;
 		return async ({ result }) => {
-			// applyAction updates `form` (and follows a redirect) without resetting
-			// the fields the seller has entered — progressive enhancement over the
-			// native POST, matching how the auth forms behave.
+			// Outcome feedback as a toast; field errors stay inline via applyAction,
+			// which updates `form` (and follows a redirect) without resetting the
+			// seller's entered fields — progressive enhancement over the native POST.
+			if (result.type === 'redirect') {
+				toast.success(isDraftMode ? 'Listing published' : 'Changes saved');
+			} else if (result.type === 'success') {
+				const status = (result.data as { status?: string } | undefined)?.status;
+				toast.success(status === 'draft' ? 'Draft saved' : 'Changes saved');
+			} else if (result.type === 'failure') {
+				const message = (result.data as { formError?: string } | undefined)?.formError;
+				if (message) toast.error(message);
+			}
 			await applyAction(result);
 			submitting = null;
 		};
@@ -166,13 +253,6 @@
 		{/if}
 	</div>
 
-	{#if formError}
-		<Alert variant="error">{formError}</Alert>
-	{/if}
-	{#if savedStatus}
-		<Alert variant="success">{savedStatus === 'draft' ? 'Draft saved.' : 'Changes saved.'}</Alert>
-	{/if}
-
 	<form method="POST" action="?/saveDraft" use:enhance={submit} class="space-y-6">
 		<input type="hidden" name="listingId" value={listingId ?? ''} />
 
@@ -193,8 +273,7 @@
 			<div class="grid gap-4 sm:grid-cols-2">
 				<div>
 					<Label for="category-top">Category</Label>
-					<Select id="category-top" bind:value={selectedTopId}>
-						<option value="">Choose a category</option>
+					<Select id="category-top" bind:value={selectedTopId} placeholder="Choose a category">
 						{#each categoryTree as top (top.id)}
 							<option value={top.id}>{top.name}</option>
 						{/each}
@@ -208,10 +287,8 @@
 						bind:value={selectedSubId}
 						disabled={!selectedTop}
 						error={errors.categoryId}
+						placeholder={selectedTop ? 'Choose a subcategory' : 'Pick a category first'}
 					>
-						<option value=""
-							>{selectedTop ? 'Choose a subcategory' : 'Pick a category first'}</option
-						>
 						{#each subOptions as sub (sub.id)}
 							<option value={sub.id}>{sub.name}</option>
 						{/each}
@@ -222,8 +299,13 @@
 			{#if selectedTop && !isService}
 				<div>
 					<Label for="condition">Condition</Label>
-					<Select id="condition" name="condition" bind:value={condition} error={errors.condition}>
-						<option value="">Choose condition</option>
+					<Select
+						id="condition"
+						name="condition"
+						bind:value={condition}
+						error={errors.condition}
+						placeholder="Choose condition"
+					>
 						{#each CONDITIONS as c (c.value)}
 							<option value={c.value}>{c.label}</option>
 						{/each}
@@ -259,19 +341,14 @@
 
 			<div>
 				<Label for="location" optional>Location</Label>
-				<Input
+				<Combobox
 					id="location"
 					name="locationArea"
-					list="nairobi-areas"
+					options={NAIROBI_AREAS}
 					bind:value={locationArea}
 					placeholder="e.g. Westlands"
 					error={errors.locationArea}
 				/>
-				<datalist id="nairobi-areas">
-					{#each NAIROBI_AREAS as area (area)}
-						<option value={area}></option>
-					{/each}
-				</datalist>
 			</div>
 		</Card>
 

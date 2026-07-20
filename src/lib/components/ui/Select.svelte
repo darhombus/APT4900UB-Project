@@ -6,11 +6,25 @@
 		value?: string;
 		/** Field error message; renders below and flags the control invalid. */
 		error?: string;
+		/**
+		 * Optional placeholder shown as the collapsed value when nothing is chosen.
+		 * Rendered as a disabled, hidden `value=""` option so it never appears as a
+		 * choosable item in the open list; validation still sees `""` as "unselected".
+		 */
+		placeholder?: string;
 		class?: string;
 		children: Snippet;
 	}
 
-	let { value = $bindable(''), error, class: klass = '', id, children, ...rest }: Props = $props();
+	let {
+		value = $bindable(''),
+		error,
+		placeholder,
+		class: klass = '',
+		id,
+		children,
+		...rest
+	}: Props = $props();
 
 	const errorId = $derived(error && id ? `${id}-error` : undefined);
 
@@ -27,6 +41,9 @@
 		aria-describedby={errorId}
 		{...rest}
 	>
+		{#if placeholder}
+			<option value="" disabled hidden>{placeholder}</option>
+		{/if}
 		{@render children()}
 	</select>
 	<!-- Chevron -->

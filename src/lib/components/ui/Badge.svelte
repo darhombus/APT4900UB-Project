@@ -16,7 +16,8 @@
 		| 'active'
 		| 'paused'
 		| 'sold'
-		| 'removed';
+		| 'removed'
+		| 'deleted';
 
 	interface Props {
 		variant?: Variant;
@@ -38,7 +39,9 @@
 		active: 'bg-success-tint text-success-strong',
 		paused: 'bg-accent-tint text-accent-strong',
 		sold: 'bg-ink text-white',
-		removed: 'bg-error-tint text-error-strong'
+		removed: 'bg-error-tint text-error-strong',
+		// A deleted listing is never rendered (RLS hides it); a muted fallback tone.
+		deleted: 'bg-neutral-tint text-subtle'
 	};
 </script>
 

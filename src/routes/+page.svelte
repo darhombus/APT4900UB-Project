@@ -1,15 +1,8 @@
 <script lang="ts">
-	import { ListingCard, SearchBar } from '$lib/components';
+	import { ListingCard } from '$lib/components';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
-
-	// A short hint of what's inside each top-level category.
-	const hint = (children: { name: string }[]) =>
-		children
-			.slice(0, 3)
-			.map((c) => c.name)
-			.join(' · ');
 </script>
 
 <svelte:head>
@@ -20,42 +13,26 @@
 	/>
 </svelte:head>
 
-<main class="mx-auto max-w-6xl px-4 py-6 sm:py-10">
-	<!-- Hero: search-forward, the fastest path to finding something -->
-	<section class="rounded-card border border-border bg-brand-tint/40 p-6 sm:p-10">
-		<h1 class="font-display text-3xl font-bold text-ink sm:text-4xl">
-			Buy and sell across Nairobi
-		</h1>
-		<p class="mt-2 max-w-prose text-sm text-muted sm:text-base">
-			Phones, furniture, clothing, and handy local services — find a good deal or list your own in
-			minutes.
-		</p>
+<main class="mx-auto max-w-6xl px-4 py-6">
+	<!-- Category entry points: one horizontal line, scrollable on narrow screens. -->
+	<nav
+		aria-label="Browse categories"
+		class="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+	>
+		{#each data.categoryTree as category (category.id)}
+			<a
+				href={`/c/${category.slug}`}
+				class="shrink-0 rounded-pill border border-border bg-surface px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-muted transition-colors hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+			>
+				{category.name}
+			</a>
+		{/each}
+	</nav>
 
-		<SearchBar class="mt-5 max-w-xl" />
-	</section>
-
-	<!-- Category entry points -->
-	<section class="mt-10">
-		<h2 class="font-display text-lg font-semibold text-ink">Browse by category</h2>
-		<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-			{#each data.categoryTree as category (category.id)}
-				<a
-					href={`/c/${category.slug}`}
-					class="group rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
-				>
-					<h3 class="font-display font-semibold text-ink group-hover:text-brand">
-						{category.name}
-					</h3>
-					<p class="mt-1 line-clamp-1 text-xs text-subtle">{hint(category.children)}</p>
-				</a>
-			{/each}
-		</div>
-	</section>
-
-	<!-- Recently posted -->
-	<section class="mt-10">
+	<!-- The listings grid is the page. -->
+	<section class="mt-6">
 		<div class="flex items-baseline justify-between">
-			<h2 class="font-display text-lg font-semibold text-ink">Recently posted</h2>
+			<h1 class="font-display text-xl font-bold text-ink">Recently posted</h1>
 			<a href="/search" class="text-sm font-medium text-brand hover:underline">Browse all</a>
 		</div>
 

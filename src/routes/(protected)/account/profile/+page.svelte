@@ -1,17 +1,52 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { AVATAR_TYPES, AVATAR_MAX_BYTES } from '$lib/validation/auth';
-	import { Alert, Badge, Button, Card, Input, Label } from '$lib/components/ui';
+	import { Badge, Button, Card, Input, Label, PasswordInput } from '$lib/components/ui';
+	import { toast } from '$lib/toast.svelte';
+	import type { SubmitFunction, ActionResult } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const profile = $derived(data.profile);
 
-	// Per-section form feedback (the action tags its result with `section`).
+	// Per-section field errors stay inline; outcomes become toasts. Each form knows
+	// its own outcome copy, so we key off the ActionResult type rather than `form`.
 	const pErrors = $derived(
 		form?.section === 'profile' && 'errors' in form ? (form.errors ?? {}) : {}
 	);
+
+	function outcome(result: ActionResult, success: string, warn = false): void {
+		if (result.type === 'success') {
+			toast.success(success);
+		} else if (result.type === 'failure') {
+			const message = (result.data as { formError?: string } | undefined)?.formError;
+			if (message) {
+				if (warn) toast.warning(message);
+				else toast.error(message);
+			}
+		}
+	}
+
+	const onAvatar: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			outcome(result, 'Photo updated');
+		};
+	const onProfile: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			outcome(result, 'Profile saved');
+		};
+	// A change-password failure is usually a stale session — a warning, not an error.
+	const onPassword: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			await update();
+			outcome(result, 'Password changed', true);
+		};
 
 	function initials(name: string | null | undefined): string {
 		if (!name) return '?';
@@ -81,7 +116,7 @@
 				method="POST"
 				action="?/uploadAvatar"
 				enctype="multipart/form-data"
-				use:enhance
+				use:enhance={onAvatar}
 				class="space-y-2"
 			>
 				<input
@@ -93,12 +128,6 @@
 				/>
 				<p class="text-xs text-subtle">JPEG, PNG, or WebP · up to 2 MB.</p>
 				{#if avatarError}<p class="text-sm text-error">{avatarError}</p>{/if}
-				{#if form?.section === 'avatar' && 'formError' in form && form.formError}
-					<p class="text-sm text-error">{form.formError}</p>
-				{/if}
-				{#if form?.section === 'avatar' && 'success' in form && form.success}
-					<p class="text-sm text-success-strong">Photo updated.</p>
-				{/if}
 				<Button type="submit" size="sm" disabled={!!avatarError}>Upload photo</Button>
 			</form>
 		</div>
@@ -108,14 +137,7 @@
 	<Card>
 		<h2 class="text-lg font-semibold text-ink">Details</h2>
 
-		{#if form?.section === 'profile' && 'formError' in form && form.formError}
-			<Alert variant="error" class="mt-3">{form.formError}</Alert>
-		{/if}
-		{#if form?.section === 'profile' && 'success' in form && form.success}
-			<Alert variant="success" class="mt-3">Profile saved.</Alert>
-		{/if}
-
-		<form method="POST" action="?/updateProfile" use:enhance class="mt-4 space-y-4">
+		<form method="POST" action="?/updateProfile" use:enhance={onProfile} class="mt-4 space-y-4">
 			<div>
 				<Label for="fullName">Full name</Label>
 				<Input
@@ -169,23 +191,12 @@
 	<Card>
 		<h2 class="text-lg font-semibold text-ink">Change password</h2>
 
-		{#if form?.section === 'password' && 'formError' in form && form.formError}
-			<Alert variant="warning" class="mt-3">
-				{form.formError}
-				<a href="/forgot-password" class="font-medium underline">Reset by email</a>.
-			</Alert>
-		{/if}
-		{#if form?.section === 'password' && 'success' in form && form.success}
-			<Alert variant="success" class="mt-3">Password changed.</Alert>
-		{/if}
-
-		<form method="POST" action="?/changePassword" use:enhance class="mt-4 space-y-4">
+		<form method="POST" action="?/changePassword" use:enhance={onPassword} class="mt-4 space-y-4">
 			<div>
 				<Label for="password">New password</Label>
-				<Input
+				<PasswordInput
 					id="password"
 					name="password"
-					type="password"
 					autocomplete="new-password"
 					error={form?.section === 'password' && 'errors' in form
 						? (form.errors?.password ?? undefined)
@@ -194,10 +205,9 @@
 			</div>
 			<div>
 				<Label for="confirmPassword">Confirm new password</Label>
-				<Input
+				<PasswordInput
 					id="confirmPassword"
 					name="confirmPassword"
-					type="password"
 					autocomplete="new-password"
 					error={form?.section === 'password' && 'errors' in form
 						? (form.errors?.confirmPassword ?? undefined)

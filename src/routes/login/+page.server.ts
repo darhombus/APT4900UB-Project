@@ -10,10 +10,12 @@ export const load: PageServerLoad = async ({ locals: { session } }) => {
 	if (session) redirect(303, '/account');
 };
 
-/** Only allow same-site, absolute-path redirect targets (no protocol-relative). */
+/** Only allow same-site, absolute-path redirect targets (no protocol-relative).
+ *  With no target, land on the browse/listings page (the home grid) — a user
+ *  bounced here from a protected page keeps returning there via `redirectTo`. */
 function safeRedirect(target: string | null): string {
 	if (target && target.startsWith('/') && !target.startsWith('//')) return target;
-	return '/account';
+	return '/';
 }
 
 export const actions: Actions = {

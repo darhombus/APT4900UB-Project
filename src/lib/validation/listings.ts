@@ -93,6 +93,13 @@ export function listingTypeForTop(top: { slug: string }): 'product' | 'service' 
 	return isServiceTop(top) ? 'service' : 'product';
 }
 
+/** subcategory id → name, for labelling cards (e.g. the service-card variant). */
+export function subcategoryNameMap(tree: CategoryTree[]): Map<string, string> {
+	const map = new Map<string, string>();
+	for (const top of tree) for (const sub of top.children) map.set(sub.id, sub.name);
+	return map;
+}
+
 // ── Price helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -200,7 +207,7 @@ export function publishGoodsErrors(input: {
 // prompt text. `paused` is the Unpublish state; a listing that has ever been
 // published never returns to draft; `removed` is admin-only (no transition here).
 
-export type ListingStatus = 'draft' | 'active' | 'paused' | 'sold' | 'removed';
+export type ListingStatus = 'draft' | 'active' | 'paused' | 'sold' | 'removed' | 'deleted';
 export type ListingTransition =
 	'publish' | 'unpublish' | 'republish' | 'markSold' | 'relist' | 'delete';
 
@@ -227,7 +234,9 @@ interface TransitionRule {
  *   active/paused ──Mark sold─▶ sold     (a paused listing can be closed out
  *                                          directly, without going public again)
  *   sold          ──Relist────▶ active   (published_at re-stamped to now())
- *   draft         ──Delete────▶ (gone)   (only a still-draft listing can be deleted)
+ *   draft              ─Delete─▶ (gone)     (hard delete; row + storage removed)
+ *   active/paused/sold ─Delete─▶ deleted   (soft delete; row + storage KEPT, hidden
+ *                                            everywhere; terminal — no path out)
  * There is deliberately no active→draft or paused→draft: once published, a
  * listing can't go back to draft.
  */
@@ -237,8 +246,9 @@ export const LISTING_TRANSITIONS: Record<ListingTransition, TransitionRule> = {
 	republish: { from: ['paused'], to: 'active', publishedAt: 'preserve' },
 	markSold: { from: ['active', 'paused'], to: 'sold', publishedAt: 'preserve' },
 	relist: { from: ['sold'], to: 'active', publishedAt: 'now' },
-	// `to` is unused for delete (the row is removed); `from` gates its legality.
-	delete: { from: ['draft'], to: 'draft', publishedAt: 'preserve' }
+	// A draft is hard-deleted (row + storage removed), so `to` is ignored for it; an
+	// ever-published listing is soft-deleted to `deleted`. `from` gates legality.
+	delete: { from: ['draft', 'active', 'paused', 'sold'], to: 'deleted', publishedAt: 'preserve' }
 };
 
 /**

@@ -5,8 +5,9 @@ import { findSubcategory } from '$lib/validation/listings';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, user } }) => {
-	// RLS returns active/sold to anyone, and drafts/removed only to their owner
-	// (or admin). So a missing row is either a bad id or a stranger's draft.
+	// RLS returns active/sold to anyone, drafts/removed only to their owner (or
+	// admin), and NEVER a `deleted` listing (hidden from everyone incl. the owner —
+	// so it 404s here). A missing row is a bad id, a stranger's draft, or a deletion.
 	const { data: listing } = await supabase
 		.from('listings')
 		.select(

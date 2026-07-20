@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/types/database';
-import { getCoverUrl } from '$lib/listing-images';
+import { getCoverUrl, coverPath } from '$lib/listing-images';
 
 /**
  * A compact relative-time label ("3h ago", "2w ago"). Computed on the SERVER
@@ -34,6 +34,12 @@ export interface ListingCardData {
 	condition: string | null;
 	coverUrl: string;
 	postedLabel: string;
+	/** True for Small Services listings; drives the photo-less service card variant. */
+	isService: boolean;
+	/** Whether the listing has at least one photo. */
+	hasImage: boolean;
+	/** Subcategory name, shown as the label on the service-card variant. */
+	categoryLabel: string | null;
 }
 
 type CardListing = {
@@ -45,6 +51,10 @@ type CardListing = {
 	published_at: string | null;
 	created_at: string;
 	listing_images?: { storage_path: string; position: number }[] | null;
+	/** listing_type from the row; 'service' selects the service-card variant. */
+	type?: string | null;
+	/** Pre-resolved subcategory name (the loads resolve it from the category tree). */
+	categoryLabel?: string | null;
 };
 
 /** Map a listings row (with its embedded images) to the card view-model. */
@@ -60,6 +70,9 @@ export function toCardData(
 		location_area: listing.location_area,
 		condition: listing.condition,
 		coverUrl: getCoverUrl(supabase, listing),
-		postedLabel: relativeTime(listing.published_at ?? listing.created_at, now)
+		postedLabel: relativeTime(listing.published_at ?? listing.created_at, now),
+		isService: listing.type === 'service',
+		hasImage: coverPath(listing.listing_images) !== null,
+		categoryLabel: listing.categoryLabel ?? null
 	};
 }

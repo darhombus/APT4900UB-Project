@@ -1,7 +1,7 @@
 import { loadCategoryTree } from '$lib/server/categories';
 import { parseSearchParams, composeSearch, SEARCH_PAGE_SIZE } from '$lib/search';
 import { runSearch } from '$lib/server/search';
-import type { CategoryTree } from '$lib/validation/listings';
+import { subcategoryNameMap, type CategoryTree } from '$lib/validation/listings';
 import type { PageServerLoad } from './$types';
 
 function categoryName(tree: CategoryTree[], slug: string): string | null {
@@ -17,7 +17,11 @@ function categoryName(tree: CategoryTree[], slug: string): string | null {
 export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
 	const tree = await loadCategoryTree(supabase);
 	const params = parseSearchParams(url.searchParams);
-	const { listings, total } = await runSearch(supabase, composeSearch(params, tree));
+	const { listings, total } = await runSearch(
+		supabase,
+		composeSearch(params, tree),
+		subcategoryNameMap(tree)
+	);
 
 	return {
 		params,

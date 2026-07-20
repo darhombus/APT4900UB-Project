@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { navigating } from '$app/state';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { Alert, Badge, Button, Card, Price } from '$lib/components/ui';
+	import { Badge, Button, Card, Price } from '$lib/components/ui';
+	import { toast } from '$lib/toast.svelte';
 	import type { Database } from '$lib/types/database';
-	import type { PageData, ActionData } from './$types';
+	import type { PageData } from './$types';
 
 	type ListingStatus = Database['public']['Enums']['listing_status'];
 
-	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let { data }: { data: PageData } = $props();
 
 	const tabs = $derived([
 		{ key: 'all', label: 'All', count: data.counts.all },
@@ -17,19 +19,24 @@
 		{ key: 'sold', label: 'Sold', count: data.counts.sold }
 	] as const);
 
-	const feedback = $derived.by(() => {
-		if (!form) return null;
-		if ('success' in form && form.success)
-			return { kind: 'success' as const, message: form.message };
-		if ('transitionError' in form)
-			return {
-				kind: 'error' as const,
-				message: form.transitionError,
-				publishErrors: 'publishErrors' in form ? form.publishErrors : undefined,
-				id: form.id
-			};
-		return null;
-	});
+	const TAB_KEYS = ['all', 'draft', 'active', 'paused', 'sold'] as const;
+	type Tab = (typeof TAB_KEYS)[number];
+
+	function tabFromUrl(url: URL): Tab {
+		const p = url.searchParams.get('tab');
+		return (TAB_KEYS as readonly string[]).includes(p ?? '') ? (p as Tab) : 'all';
+	}
+
+	// Flip the active tab at CLICK time, not after data arrives: while a navigation to
+	// this page is in flight, reflect its target tab; otherwise the loaded tab. The
+	// list area shows a skeleton for that same window.
+	const navToListings = $derived(
+		navigating.to?.url.pathname === '/sell/listings' ? navigating.to.url : null
+	);
+	const activeTab = $derived(navToListings ? tabFromUrl(navToListings) : data.tab);
+	const tabLoading = $derived(navToListings !== null);
+
+	const SKELETON_ROWS = [0, 1, 2, 3];
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -42,18 +49,36 @@
 	let pending = $state<string | null>(null);
 	const isPending = (id: string, t: string) => pending === `${id}:${t}`;
 
-	function act(transition: string, id: string): SubmitFunction {
+	const DELETABLE: readonly ListingStatus[] = ['draft', 'active', 'paused', 'sold'];
+
+	function act(
+		transition: string,
+		id: string,
+		listing?: (typeof data.listings)[number]
+	): SubmitFunction {
 		return ({ cancel }) => {
-			if (
-				transition === 'delete' &&
-				!confirm('Delete this draft for good? This also removes its photos, and can’t be undone.')
-			) {
-				cancel();
-				return;
+			if (transition === 'delete') {
+				const name = listing?.title ? `“${listing.title}”` : 'this listing';
+				const message =
+					listing?.status === 'draft'
+						? `Delete ${name}? This removes the draft and its photos for good — it can’t be undone.`
+						: `Delete ${name}? It will be removed from the marketplace for good — this can’t be undone.`;
+				if (!confirm(message)) {
+					cancel();
+					return;
+				}
 			}
 			pending = `${id}:${transition}`;
-			return async ({ update }) => {
+			return async ({ result, update }) => {
 				await update();
+				if (result.type === 'success') {
+					const message = (result.data as { message?: string } | undefined)?.message;
+					if (message) toast.success(message);
+				} else if (result.type === 'failure') {
+					const message = (result.data as { transitionError?: string } | undefined)
+						?.transitionError;
+					if (message) toast.error(message);
+				}
 				pending = null;
 			};
 		};
@@ -66,6 +91,32 @@
 	<Badge variant={status}><span class="capitalize">{status}</span></Badge>
 {/snippet}
 
+{#snippet thumb(l: (typeof data.listings)[number], size: string)}
+	{#if l.isService && !l.hasImage}
+		<!-- Photo-less service: a service glyph tile, never the placeholder-image icon. -->
+		<div
+			class={`${size} flex flex-none items-center justify-center rounded-control border border-border bg-brand-tint text-brand-strong`}
+			aria-hidden="true"
+		>
+			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none">
+				<rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.7" />
+				<path
+					d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"
+					stroke="currentColor"
+					stroke-width="1.7"
+				/>
+				<path d="M3 12h18" stroke="currentColor" stroke-width="1.7" />
+			</svg>
+		</div>
+	{:else}
+		<img
+			src={l.coverUrl}
+			alt=""
+			class={`${size} flex-none rounded-control border border-border object-cover`}
+		/>
+	{/if}
+{/snippet}
+
 {#snippet rowActions(l: (typeof data.listings)[number])}
 	{#if l.status === 'draft'}
 		<form method="POST" action="?/publish" use:enhance={act('publish', l.id)}>
@@ -75,18 +126,6 @@
 			</Button>
 		</form>
 		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>
-		<form method="POST" action="?/delete" use:enhance={act('delete', l.id)}>
-			<input type="hidden" name="id" value={l.id} />
-			<Button
-				type="submit"
-				size="sm"
-				variant="destructive"
-				loading={isPending(l.id, 'delete')}
-				disabled={!!pending}
-			>
-				Delete
-			</Button>
-		</form>
 	{:else if l.status === 'active'}
 		<form method="POST" action="?/markSold" use:enhance={act('markSold', l.id)}>
 			<input type="hidden" name="id" value={l.id} />
@@ -144,6 +183,44 @@
 	{:else}
 		<span class="text-sm text-subtle">—</span>
 	{/if}
+	{#if DELETABLE.includes(l.status)}
+		<form method="POST" action="?/delete" use:enhance={act('delete', l.id, l)}>
+			<input type="hidden" name="id" value={l.id} />
+			<Button
+				type="submit"
+				size="icon"
+				variant="destructive"
+				loading={isPending(l.id, 'delete')}
+				disabled={!!pending}
+				aria-label="Delete"
+				title="Delete"
+			>
+				{#if !isPending(l.id, 'delete')}
+					<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path d="M4 7h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+						<path
+							d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"
+							stroke="currentColor"
+							stroke-width="1.7"
+						/>
+						<path
+							d="M6 7l1 12a2 2 0 0 0 2 1.9h6a2 2 0 0 0 2-1.9L18 7"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+						<path
+							d="M10 11v6M14 11v6"
+							stroke="currentColor"
+							stroke-width="1.7"
+							stroke-linecap="round"
+						/>
+					</svg>
+				{/if}
+			</Button>
+		</form>
+	{/if}
 {/snippet}
 
 <main class="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:py-10">
@@ -152,27 +229,8 @@
 			<h1 class="font-display text-2xl font-bold text-ink">Your listings</h1>
 			<p class="mt-1 text-sm text-muted">Publish, update, and track what you’re selling.</p>
 		</div>
-		<Button href="/sell/listings/new">New listing</Button>
+		<Button href="/sell/listings/new">+ New listing</Button>
 	</div>
-
-	{#if feedback}
-		<Alert variant={feedback.kind === 'success' ? 'success' : 'error'}>
-			{feedback.message}
-			{#if feedback.kind === 'error' && feedback.publishErrors}
-				<ul class="mt-1 list-disc pl-5">
-					{#each Object.values(feedback.publishErrors) as msg (msg)}
-						<li>{msg}</li>
-					{/each}
-				</ul>
-				<a
-					href={`/sell/listings/${feedback.id}/edit`}
-					class="mt-1 inline-block font-medium underline"
-				>
-					Edit listing
-				</a>
-			{/if}
-		</Alert>
-	{/if}
 
 	{#if data.counts.all === 0}
 		<Card class="text-center">
@@ -185,14 +243,15 @@
 			</div>
 		</Card>
 	{:else}
-		<!-- Filter tabs -->
-		<div class="flex flex-wrap gap-1 border-b border-border">
+		<!-- Filter tabs: real ?tab= links, preloaded on hover/touch so the common case is
+		     instant, with the active state flipping at click time (see activeTab). -->
+		<div class="flex flex-wrap gap-1 border-b border-border" data-sveltekit-preload-data="hover">
 			{#each tabs as t (t.key)}
 				<a
 					href={t.key === 'all' ? '/sell/listings' : `?tab=${t.key}`}
-					aria-current={data.tab === t.key ? 'page' : undefined}
+					aria-current={activeTab === t.key ? 'page' : undefined}
 					class={`-mb-px flex items-center gap-1.5 rounded-t-control border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-						data.tab === t.key
+						activeTab === t.key
 							? 'border-brand text-ink'
 							: 'border-transparent text-muted hover:text-ink'
 					}`}
@@ -205,7 +264,24 @@
 			{/each}
 		</div>
 
-		{#if data.listings.length === 0}
+		{#if tabLoading}
+			<!-- Lightweight loading state (design-foundation tokens) while the tab loads. -->
+			<div class="overflow-hidden rounded-card border border-border bg-surface" aria-hidden="true">
+				<div class="animate-pulse divide-y divide-border">
+					{#each SKELETON_ROWS as i (i)}
+						<div class="flex items-center gap-3 px-4 py-3">
+							<div class="h-12 w-12 flex-none rounded-control bg-neutral-tint"></div>
+							<div class="min-w-0 flex-1 space-y-2">
+								<div class="h-3.5 w-1/2 rounded bg-neutral-tint"></div>
+								<div class="h-3 w-1/4 rounded bg-neutral-tint"></div>
+							</div>
+							<div class="hidden h-8 w-24 flex-none rounded-control bg-neutral-tint sm:block"></div>
+						</div>
+					{/each}
+				</div>
+			</div>
+			<span class="sr-only" role="status">Loading listings…</span>
+		{:else if data.listings.length === 0}
 			<Card class="text-center">
 				<p class="py-6 text-sm text-muted">No {data.tab} listings.</p>
 			</Card>
@@ -229,11 +305,7 @@
 							<tr class="border-b border-border align-middle last:border-0">
 								<td class="px-4 py-3">
 									<div class="flex items-center gap-3">
-										<img
-											src={l.coverUrl}
-											alt=""
-											class="h-12 w-12 flex-none rounded-control border border-border object-cover"
-										/>
+										{@render thumb(l, 'h-12 w-12')}
 										<div class="min-w-0">
 											<a
 												href={`/sell/listings/${l.id}/edit`}
@@ -264,11 +336,7 @@
 				{#each data.listings as l (l.id)}
 					<Card>
 						<div class="flex gap-3">
-							<img
-								src={l.coverUrl}
-								alt=""
-								class="h-16 w-16 flex-none rounded-control border border-border object-cover"
-							/>
+							{@render thumb(l, 'h-16 w-16')}
 							<div class="min-w-0 flex-1">
 								<div class="flex items-start justify-between gap-2">
 									<a href={`/sell/listings/${l.id}/edit`} class="truncate font-medium text-ink">
