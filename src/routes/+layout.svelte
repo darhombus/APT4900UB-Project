@@ -13,6 +13,7 @@
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 
 	let { data, children } = $props();
@@ -20,6 +21,10 @@
 	const profile = $derived(data.profile);
 	const isSeller = $derived(data.isSeller);
 	const categoryTree = $derived(data.categoryTree);
+
+	// The focused auth pages render without the top bar + drawer.
+	const AUTH_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'];
+	const bareAuth = $derived(AUTH_PATHS.includes(page.url.pathname));
 
 	const year = new Date().getFullYear();
 
@@ -136,135 +141,137 @@
 {/snippet}
 
 <div class="flex min-h-screen flex-col">
-	<header class="sticky top-0 z-40 bg-brand-strong text-white">
-		<div class="mx-auto max-w-6xl px-4">
-			<!-- Row 1: menu + logo, (search on desktop), account/auth -->
-			<div class="flex items-center gap-2 py-2.5 sm:gap-3">
-				<button
-					bind:this={hamburgerEl}
-					type="button"
-					onclick={openSidebar}
-					aria-label="Open menu"
-					aria-expanded={sidebarOpen}
-					aria-controls="category-drawer"
-					class="flex h-10 flex-none items-center gap-1.5 rounded-control px-2 text-sm font-medium transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
-				>
-					<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-						<path
-							d="M4 7h16M4 12h16M4 17h16"
-							stroke="currentColor"
-							stroke-width="1.8"
-							stroke-linecap="round"
-						/>
-					</svg>
-					<span class="hidden sm:inline">All</span>
-				</button>
+	{#if !bareAuth}
+		<header class="sticky top-0 z-40 bg-brand-strong text-white">
+			<div class="mx-auto max-w-6xl px-4">
+				<!-- Row 1: menu + logo, (search on desktop), account/auth -->
+				<div class="flex items-center gap-2 py-2.5 sm:gap-3">
+					<button
+						bind:this={hamburgerEl}
+						type="button"
+						onclick={openSidebar}
+						aria-label="Open menu"
+						aria-expanded={sidebarOpen}
+						aria-controls="category-drawer"
+						class="flex h-10 flex-none items-center gap-1.5 rounded-control px-2 text-sm font-medium transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
+					>
+						<svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								d="M4 7h16M4 12h16M4 17h16"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
+						<span class="hidden sm:inline">All</span>
+					</button>
 
-				<a
-					href="/"
-					class="flex-none font-display text-lg font-bold tracking-tight text-white sm:text-xl"
-				>
-					My<span class="text-white/75">Soko</span>
-				</a>
+					<a
+						href="/"
+						class="flex-none font-display text-lg font-bold tracking-tight text-white sm:text-xl"
+					>
+						My<span class="text-white/75">Soko</span>
+					</a>
 
-				<!-- Desktop: search is the dominant central instrument -->
-				<div class="hidden flex-1 md:block">
-					<SearchBar />
-				</div>
+					<!-- Desktop: search is the dominant central instrument -->
+					<div class="hidden flex-1 md:block">
+						<SearchBar />
+					</div>
 
-				<!-- Mobile: spacer pushes the account cluster to the right -->
-				<div class="flex-1 md:hidden"></div>
+					<!-- Mobile: spacer pushes the account cluster to the right -->
+					<div class="flex-1 md:hidden"></div>
 
-				<div class="flex flex-none items-center gap-1">
-					{#if session}
-						{#if isSeller}
+					<div class="flex flex-none items-center gap-1">
+						{#if session}
+							{#if isSeller}
+								<a
+									href="/sell/listings/new"
+									class="hidden h-10 items-center gap-1.5 rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90 sm:inline-flex"
+								>
+									<svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+										<path
+											d="M10 4v12M4 10h12"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										/>
+									</svg>
+									New listing
+								</a>
+							{/if}
+							<details use:autoClose class="group relative">
+								<summary
+									aria-label="Account menu"
+									class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none [&::-webkit-details-marker]:hidden"
+								>
+									{@render avatar('h-8 w-8')}
+									<svg
+										class="h-4 w-4 text-white/80 transition-transform group-open:rotate-180"
+										viewBox="0 0 20 20"
+										fill="none"
+										aria-hidden="true"
+									>
+										<path
+											d="M6 8l4 4 4-4"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</summary>
+								<div
+									class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
+								>
+									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
+									<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
+									<div class="my-1 border-t border-border"></div>
+									<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
+										<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
+									</form>
+								</div>
+							</details>
+						{:else}
 							<a
-								href="/sell/listings/new"
-								class="hidden h-10 items-center gap-1.5 rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90 sm:inline-flex"
+								href="/login"
+								class="inline-flex h-10 items-center gap-1.5 rounded-control px-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
 							>
-								<svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+								<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+									<circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
 									<path
-										d="M10 4v12M4 10h12"
+										d="M4.5 16.5a5.5 5.5 0 0 1 11 0"
 										stroke="currentColor"
-										stroke-width="1.8"
+										stroke-width="1.6"
 										stroke-linecap="round"
 									/>
 								</svg>
-								New listing
+								Log in
+							</a>
+							<a
+								href="/signup"
+								class="inline-flex h-10 flex-none items-center rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90"
+							>
+								Sign up
 							</a>
 						{/if}
-						<details use:autoClose class="group relative">
-							<summary
-								aria-label="Account menu"
-								class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none [&::-webkit-details-marker]:hidden"
-							>
-								{@render avatar('h-8 w-8')}
-								<svg
-									class="h-4 w-4 text-white/80 transition-transform group-open:rotate-180"
-									viewBox="0 0 20 20"
-									fill="none"
-									aria-hidden="true"
-								>
-									<path
-										d="M6 8l4 4 4-4"
-										stroke="currentColor"
-										stroke-width="1.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-							</summary>
-							<div
-								class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
-							>
-								<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
-								<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
-								<div class="my-1 border-t border-border"></div>
-								<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
-									<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
-								</form>
-							</div>
-						</details>
-					{:else}
-						<a
-							href="/login"
-							class="inline-flex h-10 items-center gap-1.5 rounded-control px-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-						>
-							<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-								<circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
-								<path
-									d="M4.5 16.5a5.5 5.5 0 0 1 11 0"
-									stroke="currentColor"
-									stroke-width="1.6"
-									stroke-linecap="round"
-								/>
-							</svg>
-							Log in
-						</a>
-						<a
-							href="/signup"
-							class="inline-flex h-10 flex-none items-center rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90"
-						>
-							Sign up
-						</a>
-					{/if}
+					</div>
+				</div>
+
+				<!-- Row 2 (mobile only): search on its own full-width line, always visible -->
+				<div class="pb-2.5 md:hidden">
+					<SearchBar />
 				</div>
 			</div>
+		</header>
 
-			<!-- Row 2 (mobile only): search on its own full-width line, always visible -->
-			<div class="pb-2.5 md:hidden">
-				<SearchBar />
-			</div>
-		</div>
-	</header>
-
-	<CategoryDrawer
-		open={sidebarOpen}
-		onclose={closeSidebar}
-		{categoryTree}
-		loggedIn={!!session}
-		{profile}
-	/>
+		<CategoryDrawer
+			open={sidebarOpen}
+			onclose={closeSidebar}
+			{categoryTree}
+			loggedIn={!!session}
+			{profile}
+		/>
+	{/if}
 
 	<div class="flex-1">
 		{@render children()}
