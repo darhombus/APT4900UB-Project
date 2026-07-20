@@ -437,7 +437,7 @@
 					onclick={() => (bttLog = [])}>clear</button
 				>
 			</div>
-			{#each bttLog as line}<div>{line}</div>{/each}
+			{#each bttLog as line, i (i)}<div>{line}</div>{/each}
 			{#if bttLog.length === 0}<div class="text-white/50">
 					scroll down &amp; click the button…
 				</div>{/if}
