@@ -339,7 +339,7 @@
 			type="button"
 			onclick={scrollToTop}
 			aria-label="Back to top"
-			class="fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
+			class="fixed right-5 bottom-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-menu transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none sm:bottom-2"
 		>
 			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 				<path d="M6 5h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
