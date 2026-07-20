@@ -73,6 +73,16 @@
 		(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
 	}
 
+	/**
+	 * Scroll to the very top. A plain `#top` anchor doesn't work here: it targets the
+	 * sticky header, which is already pinned in view, so the browser scrolls nowhere.
+	 * Scrolling the window directly is reliable. Reduced motion → instant, not smooth.
+	 */
+	function scrollToTop() {
+		const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+	}
+
 	const menuItem =
 		'block rounded-control px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-page hover:text-ink';
 
@@ -117,7 +127,7 @@
 {/snippet}
 
 <div class="flex min-h-screen flex-col">
-	<header id="top" class="sticky top-0 z-40 bg-brand-strong text-white">
+	<header class="sticky top-0 z-40 bg-brand-strong text-white">
 		<div class="mx-auto max-w-6xl px-4">
 			<!-- Row 1: menu + logo, (search on desktop), account/auth -->
 			<div class="flex items-center gap-2 py-2.5 sm:gap-3">
@@ -251,13 +261,23 @@
 		{@render children()}
 	</div>
 
-	<!-- Slim back-to-top strip in the band's colour (no-JS: a plain anchor jump). -->
-	<a
-		href="#top"
-		class="block bg-brand-strong py-3 text-center text-sm font-medium text-white transition-colors hover:bg-brand-hover"
+	<!-- Slim back-to-top strip in the band's colour: an up-arrow that scrolls to the top. -->
+	<button
+		type="button"
+		onclick={scrollToTop}
+		aria-label="Back to top"
+		class="flex w-full items-center justify-center bg-brand-strong py-3 text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset focus-visible:outline-none"
 	>
-		Back to top
-	</a>
+		<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+			<path
+				d="M10 15V6M6 10l4-4 4 4"
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+		</svg>
+	</button>
 
 	<footer class="border-t border-border bg-surface">
 		<div
