@@ -27,6 +27,11 @@
 	const unreadCount = $derived(data.unreadCount ?? 0);
 	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
 
+	// Stable identity + token (both strings) so the live-badge subscription below
+	// re-subscribes only on login/logout/token-refresh — not on every invalidate.
+	const userId = $derived(data.user?.id ?? null);
+	const accessToken = $derived(session?.access_token ?? null);
+
 	// The focused auth pages render without the top bar + drawer.
 	const AUTH_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'];
 	const bareAuth = $derived(AUTH_PATHS.includes(page.url.pathname));
@@ -137,6 +142,47 @@
 
 	const menuItem =
 		'block rounded-control px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-page hover:text-ink';
+
+	// ── Live unread badge ────────────────────────────────────────────────────────
+	// App-wide subscription so the header count updates without a refresh: it goes UP
+	// when a message arrives in any of the user's conversations while they're on
+	// another page, and the thread view drives it DOWN on read. RLS scopes the stream
+	// to the user's own conversations (the messages SELECT policy is evaluated per
+	// subscriber), so an unfiltered INSERT subscription only ever delivers messages
+	// they may see. Recompute is coalesced so a burst can't thrash the layout load.
+	$effect(() => {
+		const uid = userId;
+		const token = accessToken;
+		if (!uid || !supabase) return;
+		const client = supabase;
+		void client.realtime.setAuth(token);
+
+		let pending: ReturnType<typeof setTimeout> | null = null;
+		const refresh = () => {
+			if (pending) return;
+			pending = setTimeout(() => {
+				pending = null;
+				invalidate('app:unread');
+			}, 250);
+		};
+
+		const channel = client
+			.channel('user-unread')
+			.on(
+				'postgres_changes',
+				{ event: 'INSERT', schema: 'public', table: 'messages' },
+				(payload) => {
+					// Only a message from the counterpart changes the user's unread state.
+					if ((payload.new as { sender_id?: string }).sender_id !== uid) refresh();
+				}
+			)
+			.subscribe();
+
+		return () => {
+			if (pending) clearTimeout(pending);
+			client.removeChannel(channel);
+		};
+	});
 
 	/**
 	 * Keep server load functions in sync with client-side auth changes. When the

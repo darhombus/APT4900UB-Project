@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidate } from '$app/navigation';
 	import { Badge, Button, Price } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { messageTime, messageDay } from '$lib/relative-time';
@@ -13,6 +14,11 @@
 
 	const listing = $derived(data.conversation.listing);
 	const other = $derived(data.conversation.otherParty);
+	// Stable id + token (strings) so the Realtime effect below only re-subscribes on a
+	// real change — NOT when a layout invalidation (the live badge) swaps data.session's
+	// reference, which would tear down the channel and drop an in-flight message.
+	const conversationId = $derived(data.conversation.id);
+	const accessToken = $derived(data.session?.access_token ?? null);
 
 	// D3: send while active/paused/sold; blocked when deleted/removed. The context
 	// card only links out when the listing is publicly reachable (active/sold) —
@@ -71,11 +77,23 @@
 
 	// ── Composer ────────────────────────────────────────────────────────────────
 	let composer = $state('');
+	let sending = $state(false);
 	const onSend: SubmitFunction = () => {
+		sending = true;
 		return async ({ result, update }) => {
-			if (result.type === 'redirect') composer = '';
-			await update();
-			if (result.type === 'failure') notifyFromResult(result);
+			try {
+				if (result.type === 'error') {
+					// Network / unexpected failure: keep the composer text and surface a
+					// toast rather than swapping the thread for the error page.
+					notifyFromResult(result);
+					return;
+				}
+				if (result.type === 'redirect') composer = '';
+				await update();
+				if (result.type === 'failure') notifyFromResult(result);
+			} finally {
+				sending = false;
+			}
 		};
 	};
 
@@ -86,6 +104,13 @@
 		if (scrollEl && count >= 0) scrollEl.scrollTop = scrollEl.scrollHeight;
 	});
 
+	// ── Live unread (read → decrement) ───────────────────────────────────────────
+	// The server load marked this thread read; refresh the header badge so its count
+	// drops without a full reload. Keyed on the id → runs once per thread opened.
+	$effect(() => {
+		if (conversationId) invalidate('app:unread');
+	});
+
 	// ── Realtime (progressive enhancement per D4) ────────────────────────────────
 	// Best-effort: mark the thread read when a live message from the counterpart
 	// arrives, via the markRead action (which knows which last-read column is ours).
@@ -94,14 +119,17 @@
 			method: 'POST',
 			body: new FormData(),
 			headers: { 'x-sveltekit-action': 'true' }
-		}).catch(() => {});
+		})
+			.then(() => invalidate('app:unread')) // a live message we just read → keep the badge honest
+			.catch(() => {});
 	}
 
 	$effect(() => {
-		const convId = data.conversation.id;
+		const convId = conversationId;
+		const token = accessToken;
 		const supabase = data.supabase;
 		// Authenticate the socket so postgres_changes is evaluated under the user's RLS.
-		void supabase.realtime.setAuth(data.session?.access_token ?? null);
+		void supabase.realtime.setAuth(token);
 
 		const channel = supabase
 			.channel(`thread:${convId}`)
@@ -280,7 +308,7 @@
 				placeholder="Write a message"
 				class="min-h-11 flex-1 resize-none rounded-control border border-border bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-subtle focus:border-brand focus:ring-2 focus:ring-brand/30 focus:outline-none"
 			></textarea>
-			<Button type="submit">Send</Button>
+			<Button type="submit" loading={sending}>Send</Button>
 		</form>
 	{:else}
 		<div
