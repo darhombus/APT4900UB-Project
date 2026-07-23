@@ -11,9 +11,13 @@
 		categoryTree: CategoryTree[];
 		loggedIn: boolean;
 		profile: { full_name: string; avatar_url: string | null } | null;
+		/** Unread-conversation count for the Messages badge (capped display at 9+). */
+		unreadCount?: number;
 	}
 
-	let { open, onclose, categoryTree, loggedIn, profile }: Props = $props();
+	let { open, onclose, categoryTree, loggedIn, profile, unreadCount = 0 }: Props = $props();
+
+	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
 
 	let panelEl = $state<HTMLDivElement | null>(null);
 	let closeButtonEl = $state<HTMLButtonElement | null>(null);
@@ -190,6 +194,22 @@
 								{profile?.full_name ?? 'Your account'}
 							</span>
 						</div>
+						<a
+							href="/messages"
+							class={navItem}
+							onclick={onclose}
+							aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
+						>
+							<span>Messages</span>
+							{#if unreadCount > 0}
+								<span
+									aria-hidden="true"
+									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+								>
+									{unreadLabel}
+								</span>
+							{/if}
+						</a>
 						<a href="/account" class={navItem} onclick={onclose}>Account</a>
 						<a href="/sell/listings" class={navItem} onclick={onclose}>My listings</a>
 						<form method="POST" action="/logout" use:enhance onsubmit={onclose}>
