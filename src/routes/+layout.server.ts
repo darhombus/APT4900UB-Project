@@ -10,8 +10,14 @@ import type { LayoutServerLoad } from './$types';
  * (avatar + name) and the role (to gate the "New listing" action). The category
  * tree feeds the slide-out sidebar rendered on every page.
  */
-export const load: LayoutServerLoad = async ({ locals, cookies }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies, depends }) => {
 	const { session, user, supabase } = locals;
+
+	// Lets the client force a fresh unread count without a full reload: the root
+	// layout's Realtime subscription calls invalidate('app:unread') when a message
+	// arrives, and the thread view calls it after marking a thread read — both
+	// rerun this load so the badge goes up / down live.
+	depends('app:unread');
 
 	// Kick off the category query immediately so it overlaps the profile fetch.
 	const categoriesPromise = loadCategoryTree(supabase);
