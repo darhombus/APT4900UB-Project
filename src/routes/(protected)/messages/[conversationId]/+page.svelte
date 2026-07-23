@@ -1,0 +1,293 @@
+<script lang="ts">
+	import { enhance } from '$app/forms';
+	import { Badge, Button, Price } from '$lib/components/ui';
+	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
+	import { messageTime, messageDay } from '$lib/relative-time';
+	import { notifyFromResult } from '$lib/toast.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+
+	type Msg = { id: string; sender_id: string; body: string; created_at: string };
+
+	const listing = $derived(data.conversation.listing);
+	const other = $derived(data.conversation.otherParty);
+
+	// D3: send while active/paused/sold; blocked when deleted/removed. The context
+	// card only links out when the listing is publicly reachable (active/sold) —
+	// otherwise the link would 404 for the buyer.
+	const canSend = $derived(
+		listing.status === 'active' || listing.status === 'paused' || listing.status === 'sold'
+	);
+	const listingHref = $derived(
+		listing.status === 'active' || listing.status === 'sold' ? `/listings/${listing.id}` : null
+	);
+
+	// Messages that arrived live (Realtime) after the server load. `messages` dedups
+	// them against the server data; the reset effect drops the buffer whenever a
+	// fresh load (e.g. after sending) supersedes it.
+	let live = $state<Msg[]>([]);
+	const serverIds = $derived(new Set(data.messages.map((m) => m.id)));
+	const messages = $derived([...data.messages, ...live.filter((m) => !serverIds.has(m.id))]);
+
+	$effect(() => {
+		// Reading data.messages tracks it: a fresh load (e.g. after sending) drops the buffer.
+		if (data.messages) live = [];
+	});
+
+	// Group consecutive messages from the same sender: the time shows only on the
+	// last bubble of a group, and a day divider precedes each new day. Pure and
+	// deterministic (fixed-EAT formatting), so SSR and hydration agree.
+	const items = $derived(
+		messages.map((m, i) => {
+			const prev = messages[i - 1];
+			const next = messages[i + 1];
+			const day = messageDay(m.created_at);
+			const divider = !prev || messageDay(prev.created_at) !== day ? day : null;
+			const lastOfGroup =
+				!next || next.sender_id !== m.sender_id || messageDay(next.created_at) !== day;
+			return {
+				id: m.id,
+				body: m.body,
+				mine: m.sender_id === data.me,
+				time: messageTime(m.created_at),
+				showTime: lastOfGroup,
+				divider
+			};
+		})
+	);
+
+	function initials(name: string): string {
+		return (
+			name
+				.split(/\s+/)
+				.filter(Boolean)
+				.slice(0, 2)
+				.map((w) => w[0]!.toUpperCase())
+				.join('') || '?'
+		);
+	}
+
+	// ── Composer ────────────────────────────────────────────────────────────────
+	let composer = $state('');
+	const onSend: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'redirect') composer = '';
+			await update();
+			if (result.type === 'failure') notifyFromResult(result);
+		};
+	};
+
+	// ── Scroll to the newest message ─────────────────────────────────────────────
+	let scrollEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		const count = items.length; // read to re-run whenever a message is added
+		if (scrollEl && count >= 0) scrollEl.scrollTop = scrollEl.scrollHeight;
+	});
+
+	// ── Realtime (progressive enhancement per D4) ────────────────────────────────
+	// Best-effort: mark the thread read when a live message from the counterpart
+	// arrives, via the markRead action (which knows which last-read column is ours).
+	function markReadRemote() {
+		fetch(`/messages/${data.conversation.id}?/markRead`, {
+			method: 'POST',
+			body: new FormData(),
+			headers: { 'x-sveltekit-action': 'true' }
+		}).catch(() => {});
+	}
+
+	$effect(() => {
+		const convId = data.conversation.id;
+		const supabase = data.supabase;
+		// Authenticate the socket so postgres_changes is evaluated under the user's RLS.
+		void supabase.realtime.setAuth(data.session?.access_token ?? null);
+
+		const channel = supabase
+			.channel(`thread:${convId}`)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'messages',
+					filter: `conversation_id=eq.${convId}`
+				},
+				(payload) => {
+					const m = payload.new as Msg;
+					if (serverIds.has(m.id) || live.some((x) => x.id === m.id)) return; // dedup
+					live = [
+						...live,
+						{ id: m.id, sender_id: m.sender_id, body: m.body, created_at: m.created_at }
+					];
+					if (m.sender_id !== data.me) markReadRemote();
+				}
+			)
+			.subscribe((status) => {
+				// If the channel never connects, the thread still works (history + form).
+				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+					console.warn(`[thread] realtime ${status.toLowerCase()} — live updates disabled`);
+				}
+			});
+
+		return () => {
+			supabase.removeChannel(channel);
+		};
+	});
+</script>
+
+<svelte:head><title>{other.full_name} · Messages · MySoko</title></svelte:head>
+
+<main class="mx-auto flex max-w-2xl flex-col px-4 py-6 sm:py-8">
+	<!-- Header: back to the list + the counterpart -->
+	<div class="flex items-center gap-2.5">
+		<a
+			href="/messages"
+			aria-label="Back to messages"
+			class="flex h-9 w-9 flex-none items-center justify-center rounded-control text-muted transition-colors hover:bg-page hover:text-ink focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+		>
+			<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+				<path
+					d="M15 6l-6 6 6 6"
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+		</a>
+		{#if other.avatar_url}
+			<img src={other.avatar_url} alt="" class="h-9 w-9 flex-none rounded-pill object-cover" />
+		{:else}
+			<span
+				class="flex h-9 w-9 flex-none items-center justify-center rounded-pill bg-brand-tint text-xs font-semibold text-brand-strong"
+			>
+				{initials(other.full_name)}
+			</span>
+		{/if}
+		<h1 class="min-w-0 truncate font-display text-lg font-bold text-ink">{other.full_name}</h1>
+	</div>
+
+	<!-- Listing context card -->
+	{#snippet context()}
+		<div class="flex items-center gap-3">
+			{#if listing.type === 'service' && !listing.coverUrl}
+				<div
+					class="flex h-12 w-12 flex-none items-center justify-center rounded-control border border-border bg-brand-tint text-brand-strong"
+					aria-hidden="true"
+				>
+					<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none">
+						<rect
+							x="3"
+							y="7"
+							width="18"
+							height="13"
+							rx="2"
+							stroke="currentColor"
+							stroke-width="1.7"
+						/>
+						<path
+							d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7"
+							stroke="currentColor"
+							stroke-width="1.7"
+						/>
+						<path d="M3 12h18" stroke="currentColor" stroke-width="1.7" />
+					</svg>
+				</div>
+			{:else}
+				<img
+					src={listing.coverUrl ?? PLACEHOLDER_IMAGE}
+					alt=""
+					class="h-12 w-12 flex-none rounded-control border border-border object-cover"
+				/>
+			{/if}
+			<div class="min-w-0 flex-1">
+				<p class="truncate font-medium text-ink">{listing.title}</p>
+				<div class="mt-0.5 flex items-center gap-2">
+					<Price amount={listing.price} size="sm" />
+					{#if listing.status !== 'active'}
+						<Badge variant={listing.status}><span class="capitalize">{listing.status}</span></Badge>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/snippet}
+
+	{#if listingHref}
+		<a
+			href={listingHref}
+			class="mt-3 block rounded-card border border-border bg-surface p-3 transition-colors hover:border-subtle/40"
+		>
+			{@render context()}
+		</a>
+	{:else}
+		<div class="mt-3 rounded-card border border-border bg-surface p-3">
+			{@render context()}
+		</div>
+	{/if}
+	{#if listing.status === 'sold'}
+		<p class="mt-1.5 text-xs text-subtle">
+			This item is sold — you can still message about pickup.
+		</p>
+	{/if}
+
+	<!-- History -->
+	<div
+		bind:this={scrollEl}
+		class="mt-4 max-h-[58vh] min-h-60 space-y-1 overflow-y-auto rounded-card border border-border bg-page p-4"
+	>
+		{#if items.length === 0}
+			<p class="py-10 text-center text-sm text-subtle">No messages yet — say hello.</p>
+		{:else}
+			{#each items as m (m.id)}
+				{#if m.divider}
+					<div class="flex items-center justify-center py-2">
+						<span
+							class="rounded-pill bg-neutral-tint px-2.5 py-0.5 text-xs font-medium text-neutral-strong"
+						>
+							{m.divider}
+						</span>
+					</div>
+				{/if}
+				<div class={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
+					<div class="max-w-[80%]">
+						<div
+							class={`rounded-card px-3.5 py-2 text-sm whitespace-pre-wrap wrap-break-word ${
+								m.mine ? 'bg-brand text-white' : 'border border-border bg-surface text-ink'
+							}`}
+						>
+							{m.body}
+						</div>
+						{#if m.showTime}
+							<p class={`mt-0.5 text-xs text-subtle ${m.mine ? 'text-right' : 'text-left'}`}>
+								{m.time}
+							</p>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		{/if}
+	</div>
+
+	<!-- Composer, or the blocked notice (D3) -->
+	{#if canSend}
+		<form method="POST" action="?/send" use:enhance={onSend} class="mt-3 flex items-end gap-2">
+			<textarea
+				name="body"
+				bind:value={composer}
+				rows="1"
+				required
+				placeholder="Write a message"
+				class="min-h-11 flex-1 resize-none rounded-control border border-border bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-subtle focus:border-brand focus:ring-2 focus:ring-brand/30 focus:outline-none"
+			></textarea>
+			<Button type="submit">Send</Button>
+		</form>
+	{:else}
+		<div
+			class="mt-3 rounded-card border border-border bg-neutral-tint/50 px-4 py-3 text-center text-sm text-muted"
+		>
+			This listing is no longer available, so you can’t send new messages. The conversation stays
+			here for reference.
+		</div>
+	{/if}
+</main>
