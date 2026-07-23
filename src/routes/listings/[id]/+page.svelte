@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { Alert, Badge, Button, Price } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { conditionLabel } from '$lib/validation/listings';
+	import { notifyFromResult } from '$lib/toast.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -17,6 +20,24 @@
 	const isSold = $derived(listing.status === 'sold');
 	const isPublic = $derived(listing.status === 'active' || listing.status === 'sold');
 	const condition = $derived(listing.condition ? conditionLabel(listing.condition) : null);
+
+	// Message button (D3): shown only to a non-owner viewing an ACTIVE listing.
+	// Sold/paused/removed/deleted never show it (paused/removed aren't publicly
+	// reachable anyway; owners never see it on their own listing). Logged-out visitors
+	// get a login link that returns here; authenticated non-owners post to the
+	// startConversation action, which opens or resumes the thread.
+	const canMessage = $derived(listing.status === 'active' && !data.isOwner);
+	const loginHref = $derived(`/login?redirectTo=${encodeURIComponent(`/listings/${listing.id}`)}`);
+
+	let messaging = $state(false);
+	const onMessage: SubmitFunction = () => {
+		messaging = true;
+		return async ({ result, update }) => {
+			await update();
+			if (result.type === 'failure') notifyFromResult(result);
+			messaging = false;
+		};
+	};
 
 	const dateFull = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -137,10 +158,19 @@
 			{/if}
 			<p class="mt-2 text-sm text-muted">{listing.location_area ?? 'Nairobi'} · {postedLabel}</p>
 
-			<div class="mt-5">
-				<Button disabled class="w-full sm:w-auto">Message seller</Button>
-				<p class="mt-1.5 text-xs text-subtle">Messaging is coming soon.</p>
-			</div>
+			{#if canMessage}
+				<div class="mt-5">
+					{#if data.session}
+						<form method="POST" action="?/message" use:enhance={onMessage}>
+							<Button type="submit" loading={messaging} class="w-full sm:w-auto">
+								{data.existingConversationId ? 'View conversation' : 'Message seller'}
+							</Button>
+						</form>
+					{:else}
+						<Button href={loginHref} class="w-full sm:w-auto">Message seller</Button>
+					{/if}
+				</div>
+			{/if}
 
 			<div class="my-6 border-t border-border"></div>
 

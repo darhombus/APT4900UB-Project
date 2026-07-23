@@ -72,21 +72,33 @@ export type Database = {
       conversations: {
         Row: {
           buyer_id: string
+          buyer_last_read_at: string
           created_at: string
           id: string
+          last_message_at: string
           listing_id: string
+          seller_id: string
+          seller_last_read_at: string
         }
         Insert: {
           buyer_id: string
+          buyer_last_read_at?: string
           created_at?: string
           id?: string
+          last_message_at?: string
           listing_id: string
+          seller_id: string
+          seller_last_read_at?: string
         }
         Update: {
           buyer_id?: string
+          buyer_last_read_at?: string
           created_at?: string
           id?: string
+          last_message_at?: string
           listing_id?: string
+          seller_id?: string
+          seller_last_read_at?: string
         }
         Relationships: [
           {
@@ -101,6 +113,13 @@ export type Database = {
             columns: ["listing_id"]
             isOneToOne: false
             referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -218,7 +237,6 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
-          read_at: string | null
           sender_id: string
         }
         Insert: {
@@ -226,7 +244,6 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
-          read_at?: string | null
           sender_id: string
         }
         Update: {
@@ -234,7 +251,6 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
-          read_at?: string | null
           sender_id?: string
         }
         Relationships: [
@@ -525,6 +541,10 @@ export type Database = {
       become_seller: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      conversation_is_sendable: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
       is_conversation_participant: {

@@ -38,6 +38,7 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		user: data.user,
 		profile: data?.profile ?? null,
 		isSeller: data?.isSeller ?? false,
+		unreadCount: data?.unreadCount ?? 0,
 		categoryTree: data?.categoryTree ?? []
 	};
 };
