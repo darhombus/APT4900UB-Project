@@ -1,4 +1,5 @@
 import { loadCategoryTree } from '$lib/server/categories';
+import { unreadConversationCount } from '$lib/server/messaging';
 import type { LayoutServerLoad } from './$types';
 
 /**
@@ -17,12 +18,20 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 
 	let profile: { full_name: string; avatar_url: string | null } | null = null;
 	let isSeller = false;
+	let unreadCount = 0;
 	if (session && user) {
-		const { data } = await supabase
-			.from('profiles')
-			.select('full_name, avatar_url, role')
-			.eq('id', user.id)
-			.single();
+		// Header essentials + the unread-conversation count for the badge, in parallel.
+		// Computed server-side like the rest of the session-dependent UI, so SSR and
+		// hydration agree (no mismatch). The badge refreshes on navigation, not live.
+		//
+		// The unread count is best-effort: it rides in the same Promise.all as the
+		// profile fetch, so a throw here would otherwise reject the whole layout load
+		// and take down every page. Catch it to 0 — a non-critical badge must never be
+		// able to crash the shell (worst case the badge is briefly absent).
+		const [{ data }, unread] = await Promise.all([
+			supabase.from('profiles').select('full_name, avatar_url, role').eq('id', user.id).single(),
+			unreadConversationCount(supabase, user.id).catch(() => 0)
+		]);
 		if (data) {
 			profile = { full_name: data.full_name, avatar_url: data.avatar_url };
 			isSeller = data.role === 'seller' || data.role === 'admin';
@@ -30,6 +39,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 			// instead of issuing its own profile query.
 			locals.roleCache = Promise.resolve(data.role);
 		}
+		unreadCount = unread;
 	}
 
 	return {
@@ -40,6 +50,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 		user,
 		profile,
 		isSeller,
+		unreadCount,
 		categoryTree: await categoriesPromise,
 		cookies: cookies.getAll()
 	};

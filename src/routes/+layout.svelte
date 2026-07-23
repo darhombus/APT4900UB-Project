@@ -22,6 +22,11 @@
 	const isSeller = $derived(data.isSeller);
 	const categoryTree = $derived(data.categoryTree);
 
+	// Unread-conversation badge (D5). Server-computed in the layout load, so SSR and
+	// hydration match; capped at 9+. Refreshes on navigation (not live) this phase.
+	const unreadCount = $derived(data.unreadCount ?? 0);
+	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
+
 	// The focused auth pages render without the top bar + drawer.
 	const AUTH_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'];
 	const bareAuth = $derived(AUTH_PATHS.includes(page.url.pathname));
@@ -248,7 +253,19 @@
 									aria-label="Account menu"
 									class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-control px-1.5 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none [&::-webkit-details-marker]:hidden"
 								>
-									{@render avatar('h-8 w-8')}
+									<span class="relative flex-none">
+										{@render avatar('h-8 w-8')}
+										{#if unreadCount > 0}
+											<!-- Glanceable unread count; the Messages menu item carries the accessible label. -->
+											<span
+												data-testid="header-unread-badge"
+												aria-hidden="true"
+												class="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1 text-[10px] font-bold text-white ring-2 ring-brand-strong"
+											>
+												{unreadLabel}
+											</span>
+										{/if}
+									</span>
 									<svg
 										class="h-4 w-4 text-white/80 transition-transform group-open:rotate-180"
 										viewBox="0 0 20 20"
@@ -267,6 +284,22 @@
 								<div
 									class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
 								>
+									<a
+										href="/messages"
+										class={`${menuItem} flex items-center justify-between`}
+										onclick={closeMenu}
+										aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
+									>
+										<span>Messages</span>
+										{#if unreadCount > 0}
+											<span
+												aria-hidden="true"
+												class="flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+											>
+												{unreadLabel}
+											</span>
+										{/if}
+									</a>
 									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
 									<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
 									<div class="my-1 border-t border-border"></div>
@@ -335,6 +368,7 @@
 			{categoryTree}
 			loggedIn={!!session}
 			{profile}
+			{unreadCount}
 		/>
 	{/if}
 

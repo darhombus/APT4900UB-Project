@@ -1,8 +1,9 @@
-import { error } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { loadCategoryTree } from '$lib/server/categories';
 import { publicUrl } from '$lib/listing-images';
 import { findSubcategory } from '$lib/validation/listings';
-import type { PageServerLoad } from './$types';
+import { findConversation, startConversation } from '$lib/server/messaging';
+import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, user } }) => {
 	// RLS returns active/sold to anyone, drafts/removed only to their owner (or
@@ -51,5 +52,26 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, user } 
 			}
 		: null;
 
-	return { listing, images, seller: sellerRes.data, breadcrumb, isOwner };
+	// For an authenticated non-owner on an active listing, does a thread already
+	// exist? Drives the "Message seller" vs "View conversation" button label.
+	const existingConversationId =
+		user && !isOwner && listing.status === 'active'
+			? await findConversation(supabase, listing.id, user.id)
+			: null;
+
+	return { listing, images, seller: sellerRes.data, breadcrumb, isOwner, existingConversationId };
+};
+
+export const actions: Actions = {
+	// Start (or resume) a conversation with the seller. Section 6 wires the button
+	// that posts here; the guards below back up the conversations_insert RLS policy
+	// with friendly, toast-surfaced errors.
+	message: async ({ params, url, locals: { supabase, user } }) => {
+		if (!user) redirect(303, `/login?redirectTo=${encodeURIComponent(url.pathname)}`);
+
+		const result = await startConversation(supabase, user.id, params.id);
+		if (!result.ok) return fail(400, { formError: result.error });
+
+		redirect(303, `/messages/${result.conversationId}`);
+	}
 };
