@@ -37,9 +37,16 @@
 	const serverIds = $derived(new Set(data.messages.map((m) => m.id)));
 	const messages = $derived([...data.messages, ...live.filter((m) => !serverIds.has(m.id))]);
 
+	// A signature of the server message set. It changes only on a REAL reload (new
+	// messages) — not when an unrelated layout invalidation (the app-wide unread badge)
+	// hands `data` a new reference with the same messages. Keying the reset on this is
+	// critical: otherwise the badge refresh wipes a message that just arrived over
+	// Realtime before it can be rendered.
+	const serverKey = $derived(data.messages.map((m) => m.id).join(','));
 	$effect(() => {
-		// Reading data.messages tracks it: a fresh load (e.g. after sending) drops the buffer.
-		if (data.messages) live = [];
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		serverKey; // track the signature; reset the live buffer only when it truly changes
+		live = [];
 	});
 
 	// Group consecutive messages from the same sender: the time shows only on the
@@ -77,13 +84,21 @@
 
 	// ── Composer ────────────────────────────────────────────────────────────────
 	let composer = $state('');
-	let sending = $state(false);
-	const onSend: SubmitFunction = () => {
-		sending = true;
+	let sending = $state(false); // drives the Send spinner — DELAYED, so a fast send feels instant
+	let inFlight = false; // immediate double-submit guard (non-visual)
+	const onSend: SubmitFunction = ({ cancel }) => {
+		if (inFlight) return cancel(); // ignore a second submit while one is in flight
+		inFlight = true;
+		// Only show the spinner if the round-trip is actually slow. A fast send shouldn't
+		// flash a loading state — the message itself appears live via the subscription.
+		const spinnerTimer = setTimeout(() => {
+			if (inFlight) sending = true;
+		}, 400);
 		return async ({ result, update }) => {
-			// Reset as soon as the server responds — do NOT defer past update(): on our
-			// success path the action returns a redirect, and update() then navigates and
-			// may not hand control back here, which would leave the button stuck loading.
+			clearTimeout(spinnerTimer);
+			inFlight = false;
+			// Reset before update(): on the success path the action redirects, and update()
+			// then navigates and may not hand control back here.
 			sending = false;
 			if (result.type === 'error') {
 				// Network / unexpected failure: keep the composer text and surface a toast
@@ -101,7 +116,7 @@
 	function onComposerKeydown(event: KeyboardEvent) {
 		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
 		event.preventDefault();
-		if (sending) return; // don't double-send while one is in flight
+		if (inFlight) return; // don't double-send while one is in flight
 		(event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
 	}
 
