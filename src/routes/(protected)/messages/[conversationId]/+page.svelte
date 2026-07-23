@@ -81,21 +81,29 @@
 	const onSend: SubmitFunction = () => {
 		sending = true;
 		return async ({ result, update }) => {
-			try {
-				if (result.type === 'error') {
-					// Network / unexpected failure: keep the composer text and surface a
-					// toast rather than swapping the thread for the error page.
-					notifyFromResult(result);
-					return;
-				}
-				if (result.type === 'redirect') composer = '';
-				await update();
-				if (result.type === 'failure') notifyFromResult(result);
-			} finally {
-				sending = false;
+			// Reset as soon as the server responds — do NOT defer past update(): on our
+			// success path the action returns a redirect, and update() then navigates and
+			// may not hand control back here, which would leave the button stuck loading.
+			sending = false;
+			if (result.type === 'error') {
+				// Network / unexpected failure: keep the composer text and surface a toast
+				// rather than swapping the thread for the error page.
+				notifyFromResult(result);
+				return;
 			}
+			if (result.type === 'redirect') composer = '';
+			await update();
+			if (result.type === 'failure') notifyFromResult(result);
 		};
 	};
+
+	// Enter sends; Shift+Enter (and mid-IME-composition Enter) inserts a newline.
+	function onComposerKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+		event.preventDefault();
+		if (sending) return; // don't double-send while one is in flight
+		(event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+	}
 
 	// ── Scroll to the newest message ─────────────────────────────────────────────
 	let scrollEl = $state<HTMLElement | null>(null);
@@ -303,6 +311,7 @@
 			<textarea
 				name="body"
 				bind:value={composer}
+				onkeydown={onComposerKeydown}
 				rows="1"
 				required
 				placeholder="Write a message"
