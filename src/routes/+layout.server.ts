@@ -10,14 +10,14 @@ import type { LayoutServerLoad } from './$types';
  * (avatar + name) and the role (to gate the "New listing" action). The category
  * tree feeds the slide-out sidebar rendered on every page.
  */
-export const load: LayoutServerLoad = async ({ locals, cookies, depends }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 	const { session, user, supabase } = locals;
 
-	// Lets the client force a fresh unread count without a full reload: the root
-	// layout's Realtime subscription calls invalidate('app:unread') when a message
-	// arrives, and the thread view calls it after marking a thread read — both
-	// rerun this load so the badge goes up / down live.
-	depends('app:unread');
+	// unreadCount below is only the SSR seed. Live updates go through the
+	// dedicated /api/unread-count endpoint + the client-side unread-count store
+	// (see +layout.svelte), not a layout reload — invalidating this whole load
+	// per message used to re-run the profile + category-tree queries too and
+	// made the app feel like it hung during an active conversation.
 
 	// Kick off the category query immediately so it overlaps the profile fetch.
 	const categoriesPromise = loadCategoryTree(supabase);

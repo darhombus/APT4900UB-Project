@@ -224,12 +224,9 @@
 {/snippet}
 
 <main class="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:py-10">
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<h1 class="font-display text-2xl font-bold text-ink">Your listings</h1>
-			<p class="mt-1 text-sm text-muted">Publish, update, and track what you’re selling.</p>
-		</div>
-		<Button href="/sell/listings/new">+ New listing</Button>
+	<div>
+		<h1 class="font-display text-2xl font-bold text-ink">Your listings</h1>
+		<p class="mt-1 text-sm text-muted">Publish, update, and track what you’re selling.</p>
 	</div>
 
 	{#if data.counts.all === 0}
