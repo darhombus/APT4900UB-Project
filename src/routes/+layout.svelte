@@ -15,6 +15,7 @@
 	import { invalidate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import { unreadCount as unreadCountStore } from '$lib/unread-count.svelte';
 
 	let { data, children } = $props();
 	let { session, supabase } = $derived(data);
@@ -22,9 +23,16 @@
 	const isSeller = $derived(data.isSeller);
 	const categoryTree = $derived(data.categoryTree);
 
-	// Unread-conversation badge (D5). Server-computed in the layout load, so SSR and
-	// hydration match; capped at 9+. Refreshes on navigation (not live) this phase.
-	const unreadCount = $derived(data.unreadCount ?? 0);
+	// Unread-conversation badge (D5). Seeded from the server-computed layout value
+	// (so SSR and hydration match), then kept live by the subscription below via a
+	// direct store update — NOT via invalidate('app:unread'), which used to force
+	// the whole root layout (profile + category tree + auth revalidation) to
+	// reload on every incoming message and made the app feel like it hung during
+	// an active conversation. Capped at 9+ for display.
+	$effect(() => {
+		unreadCountStore.set(data.unreadCount ?? 0);
+	});
+	const unreadCount = $derived(unreadCountStore.value);
 	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
 
 	// Stable identity + token (both strings) so the live-badge subscription below
@@ -149,7 +157,7 @@
 	// another page, and the thread view drives it DOWN on read. RLS scopes the stream
 	// to the user's own conversations (the messages SELECT policy is evaluated per
 	// subscriber), so an unfiltered INSERT subscription only ever delivers messages
-	// they may see. Recompute is coalesced so a burst can't thrash the layout load.
+	// they may see. Recompute is coalesced so a burst can't thrash the count endpoint.
 	$effect(() => {
 		const uid = userId;
 		const token = accessToken;
@@ -162,7 +170,10 @@
 			if (pending) return;
 			pending = setTimeout(() => {
 				pending = null;
-				invalidate('app:unread');
+				fetch('/api/unread-count')
+					.then((r) => r.json())
+					.then(({ count }) => unreadCountStore.set(count))
+					.catch(() => {});
 			}, 250);
 		};
 

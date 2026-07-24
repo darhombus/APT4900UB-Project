@@ -9,8 +9,17 @@
 		value?: string;
 		placeholder?: string;
 		class?: string;
+		/** Show the Filters shortcut (a direct link to /search's filter panel) inside
+		 *  the bar, so filters are reachable without typing a query first. Omitted on
+		 *  /search itself, where the full filter panel already sits right below. */
+		showFilters?: boolean;
 	}
-	let { value = '', placeholder = 'Search listings…', class: klass = '' }: Props = $props();
+	let {
+		value = '',
+		placeholder = 'Search listings…',
+		class: klass = '',
+		showFilters = true
+	}: Props = $props();
 </script>
 
 <form action="/search" method="GET" role="search" class={`flex ${klass}`}>
@@ -35,5 +44,21 @@
 				<path d="M17 17l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
 			</svg>
 		</button>
+		{#if showFilters}
+			<a
+				href="/search"
+				aria-label="Filters"
+				class="flex flex-none items-center justify-center border-l border-border px-3.5 text-muted transition-colors hover:bg-page hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-inset"
+			>
+				<svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+					<path
+						d="M3 5h14M6 10h8M8 15h4"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linecap="round"
+					/>
+				</svg>
+			</a>
+		{/if}
 	</div>
 </form>

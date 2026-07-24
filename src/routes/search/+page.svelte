@@ -65,7 +65,7 @@
 </svelte:head>
 
 <main class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:py-8">
-	<SearchBar value={p.q} class="max-w-2xl" />
+	<SearchBar value={p.q} class="max-w-2xl" showFilters={false} />
 
 	<FilterSortBar
 		{base}
