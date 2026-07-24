@@ -8,7 +8,7 @@ import type { Database } from '$lib/types/database';
  * server-validated auth state.
  *
  * The `session` and `user` come straight from `+layout.server.ts` (populated by
- * `safeGetSession()` -> `getUser()` in hooks.server.ts). We deliberately do NOT
+ * `safeGetSession()` -> `getClaims()` in hooks.server.ts). We deliberately do NOT
  * call the browser client's `getSession()`/`getUser()` here: right after a
  * full-page-load login the freshly-set auth cookie hasn't settled, so the browser
  * `getSession()` transiently returns null. That made the client's first render
