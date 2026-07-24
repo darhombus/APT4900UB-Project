@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { invalidate } from '$app/navigation';
 	import { Badge, Button, Price } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { messageTime, messageDay } from '$lib/relative-time';
 	import { notifyFromResult } from '$lib/toast.svelte';
+	import { unreadCount } from '$lib/unread-count.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageData } from './$types';
 
@@ -130,10 +130,17 @@
 	});
 
 	// ── Live unread (read → decrement) ───────────────────────────────────────────
-	// The server load marked this thread read; refresh the header badge so its count
-	// drops without a full reload. Keyed on the id → runs once per thread opened.
+	// The server load marked this thread read; refresh the header badge count via
+	// the lightweight endpoint (not a layout reload). Keyed on the id → runs once
+	// per thread opened.
+	function refreshUnreadCount() {
+		fetch('/api/unread-count')
+			.then((r) => r.json())
+			.then(({ count }) => unreadCount.set(count))
+			.catch(() => {});
+	}
 	$effect(() => {
-		if (conversationId) invalidate('app:unread');
+		if (conversationId) refreshUnreadCount();
 	});
 
 	// ── Realtime (progressive enhancement per D4) ────────────────────────────────
@@ -145,7 +152,7 @@
 			body: new FormData(),
 			headers: { 'x-sveltekit-action': 'true' }
 		})
-			.then(() => invalidate('app:unread')) // a live message we just read → keep the badge honest
+			.then(refreshUnreadCount) // a live message we just read → keep the badge honest
 			.catch(() => {});
 	}
 
