@@ -86,6 +86,7 @@
 	let composer = $state('');
 	let sending = $state(false); // drives the Send spinner — DELAYED, so a fast send feels instant
 	let inFlight = false; // immediate double-submit guard (non-visual)
+	let realtimeReady = $state(false); // true once the thread's Realtime channel is subscribed
 	const onSend: SubmitFunction = ({ cancel }) => {
 		if (inFlight) return cancel(); // ignore a second submit while one is in flight
 		inFlight = true;
@@ -97,18 +98,19 @@
 		return async ({ result, update }) => {
 			clearTimeout(spinnerTimer);
 			inFlight = false;
-			// Reset before update(): on the success path the action redirects, and update()
-			// then navigates and may not hand control back here.
 			sending = false;
-			if (result.type === 'error') {
-				// Network / unexpected failure: keep the composer text and surface a toast
-				// rather than swapping the thread for the error page.
-				notifyFromResult(result);
+			if (result.type === 'redirect') {
+				// Success. Clear the box; the sent message lands via the Realtime
+				// subscription. Skip the redirect-RELOAD — that reload is what made sending
+				// feel slow — whenever the channel is live; fall back to it only when
+				// Realtime isn't connected (cold start / down) so the sender still sees it.
+				composer = '';
+				if (realtimeReady) return;
+				await update();
 				return;
 			}
-			if (result.type === 'redirect') composer = '';
-			await update();
-			if (result.type === 'failure') notifyFromResult(result);
+			// failure (validation) or error (network) → toast, keep the composer text.
+			notifyFromResult(result);
 		};
 	};
 
@@ -151,6 +153,7 @@
 		const convId = conversationId;
 		const token = accessToken;
 		const supabase = data.supabase;
+		realtimeReady = false; // re-establishing on this conversation; not live until SUBSCRIBED
 		// Authenticate the socket so postgres_changes is evaluated under the user's RLS.
 		void supabase.realtime.setAuth(token);
 
@@ -175,6 +178,7 @@
 				}
 			)
 			.subscribe((status) => {
+				realtimeReady = status === 'SUBSCRIBED';
 				// If the channel never connects, the thread still works (history + form).
 				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
 					console.warn(`[thread] realtime ${status.toLowerCase()} — live updates disabled`);
