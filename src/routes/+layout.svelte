@@ -281,7 +281,7 @@
 
 					<!-- Desktop: search is the dominant central instrument -->
 					<div class="hidden flex-1 md:block">
-						<SearchBar />
+						<SearchBar {categoryTree} />
 					</div>
 
 					<!-- Mobile: spacer pushes the account cluster to the right -->
@@ -414,7 +414,7 @@
 
 				<!-- Row 2 (mobile only): search on its own full-width line, always visible -->
 				<div class="pb-2.5 md:hidden">
-					<SearchBar />
+					<SearchBar {categoryTree} />
 				</div>
 			</div>
 		</header>
