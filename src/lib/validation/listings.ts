@@ -1,4 +1,16 @@
 import { z } from 'zod';
+// Condition labels + Nairobi areas live in a zod-free module so the header
+// SearchBar's filter menu can import them without pulling zod into the
+// root-layout bundle. Re-exported here so existing importers are unaffected.
+import {
+	CONDITIONS,
+	NAIROBI_AREAS,
+	conditionLabel,
+	type ConditionValue
+} from '$lib/listing-constants';
+
+export { CONDITIONS, NAIROBI_AREAS, conditionLabel };
+export type { ConditionValue };
 
 /**
  * Listing form validation, shared by the client (progressive-enhancement hints)
@@ -21,38 +33,7 @@ import { z } from 'zod';
  * `condition_products_only` CHECK).
  */
 
-/** The item_condition enum values, with the display labels the UI shows. */
-export const CONDITIONS = [
-	{ value: 'new', label: 'New' },
-	{ value: 'used_like_new', label: 'Used — like new' },
-	{ value: 'used_good', label: 'Used — good' },
-	{ value: 'used_fair', label: 'Used — fair' }
-] as const;
-
-export type ConditionValue = (typeof CONDITIONS)[number]['value'];
-
 const CONDITION_VALUES = CONDITIONS.map((c) => c.value) as [ConditionValue, ...ConditionValue[]];
-
-/** Display label for a stored condition value ("used_good" → "Used — good"). */
-export function conditionLabel(value: string): string {
-	return CONDITIONS.find((c) => c.value === value)?.label ?? value;
-}
-
-/** Common Nairobi areas offered as a datalist on the free-text location field. */
-export const NAIROBI_AREAS = [
-	'Westlands',
-	'Kilimani',
-	'Kasarani',
-	'Embakasi',
-	'Karen',
-	"Lang'ata",
-	'Roysambu',
-	'South B',
-	'South C',
-	'Donholm',
-	'Ruaka',
-	'CBD'
-] as const;
 
 /** Fixed slug of the one top-level category whose listings are services. */
 export const SMALL_SERVICES_SLUG = 'small-services';
