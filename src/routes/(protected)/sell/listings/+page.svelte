@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { navigating } from '$app/state';
+	import { page } from '$app/state';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Badge, Button, Card, Price } from '$lib/components/ui';
 	import { toast } from '$lib/toast.svelte';
@@ -27,16 +27,13 @@
 		return (TAB_KEYS as readonly string[]).includes(p ?? '') ? (p as Tab) : 'all';
 	}
 
-	// Flip the active tab at CLICK time, not after data arrives: while a navigation to
-	// this page is in flight, reflect its target tab; otherwise the loaded tab. The
-	// list area shows a skeleton for that same window.
-	const navToListings = $derived(
-		navigating.to?.url.pathname === '/sell/listings' ? navigating.to.url : null
+	// The active tab is read straight from the URL, and the listings (all fetched
+	// once) are filtered client-side — so switching tabs is instant, with no server
+	// round-trip or loading state.
+	const activeTab = $derived(tabFromUrl(page.url));
+	const visible = $derived(
+		activeTab === 'all' ? data.listings : data.listings.filter((l) => l.status === activeTab)
 	);
-	const activeTab = $derived(navToListings ? tabFromUrl(navToListings) : data.tab);
-	const tabLoading = $derived(navToListings !== null);
-
-	const SKELETON_ROWS = [0, 1, 2, 3];
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -240,9 +237,9 @@
 			</div>
 		</Card>
 	{:else}
-		<!-- Filter tabs: real ?tab= links, preloaded on hover/touch so the common case is
-		     instant, with the active state flipping at click time (see activeTab). -->
-		<div class="flex flex-wrap gap-1 border-b border-border" data-sveltekit-preload-data="hover">
+		<!-- Filter tabs: real ?tab= links, but the load doesn't read the tab — switching
+		     is a pure client-side filter of the already-loaded listings (instant). -->
+		<div class="flex flex-wrap gap-1 border-b border-border">
 			{#each tabs as t (t.key)}
 				<a
 					href={t.key === 'all' ? '/sell/listings' : `?tab=${t.key}`}
@@ -261,26 +258,9 @@
 			{/each}
 		</div>
 
-		{#if tabLoading}
-			<!-- Lightweight loading state (design-foundation tokens) while the tab loads. -->
-			<div class="overflow-hidden rounded-card border border-border bg-surface" aria-hidden="true">
-				<div class="animate-pulse divide-y divide-border">
-					{#each SKELETON_ROWS as i (i)}
-						<div class="flex items-center gap-3 px-4 py-3">
-							<div class="h-12 w-12 flex-none rounded-control bg-neutral-tint"></div>
-							<div class="min-w-0 flex-1 space-y-2">
-								<div class="h-3.5 w-1/2 rounded bg-neutral-tint"></div>
-								<div class="h-3 w-1/4 rounded bg-neutral-tint"></div>
-							</div>
-							<div class="hidden h-8 w-24 flex-none rounded-control bg-neutral-tint sm:block"></div>
-						</div>
-					{/each}
-				</div>
-			</div>
-			<span class="sr-only" role="status">Loading listings…</span>
-		{:else if data.listings.length === 0}
+		{#if visible.length === 0}
 			<Card class="text-center">
-				<p class="py-6 text-sm text-muted">No {data.tab} listings.</p>
+				<p class="py-6 text-sm text-muted">No {activeTab} listings.</p>
 			</Card>
 		{:else}
 			<!-- Desktop table -->
@@ -298,7 +278,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each data.listings as l (l.id)}
+						{#each visible as l (l.id)}
 							<tr class="border-b border-border align-middle last:border-0">
 								<td class="px-4 py-3">
 									<div class="flex items-center gap-3">
@@ -330,7 +310,7 @@
 
 			<!-- Mobile cards -->
 			<div class="space-y-3 sm:hidden">
-				{#each data.listings as l (l.id)}
+				{#each visible as l (l.id)}
 					<Card>
 						<div class="flex gap-3">
 							{@render thumb(l, 'h-16 w-16')}
