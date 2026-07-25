@@ -358,7 +358,13 @@
 										{/if}
 									</a>
 									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
-									<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
+									<!-- Link buyers straight to onboarding: /sell/listings would just
+									     server-redirect them there (an extra round-trip). -->
+									<a
+										href={isSeller ? '/sell/listings' : '/sell/onboarding'}
+										class={menuItem}
+										onclick={closeMenu}>My listings</a
+									>
 									<div class="my-1 border-t border-border"></div>
 									<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
 										<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
@@ -424,6 +430,7 @@
 			onclose={closeSidebar}
 			{categoryTree}
 			loggedIn={!!session}
+			{isSeller}
 			{profile}
 			{unreadCount}
 		/>
