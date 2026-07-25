@@ -8,10 +8,14 @@ import type { LayoutServerLoad } from './$types';
  * /sell/onboarding, where they can upgrade. (The (protected) layout already
  * enforced authentication.)
  */
-export const load: LayoutServerLoad = async ({ locals, url }) => {
+export const load: LayoutServerLoad = async ({ locals, url, route }) => {
 	requireUser(locals, url);
 	const role = await getProfileRole(locals);
-	const onboarding = url.pathname === '/sell/onboarding';
+	// Use route.id, not url.pathname: reading `url` here would make this guard re-run
+	// on every in-page query-string change (e.g. the /sell/listings ?tab= tabs),
+	// adding a needless server round-trip. route.id only changes on a real route
+	// change, so the guard runs once and the tabs stay a pure client-side filter.
+	const onboarding = route.id === '/(protected)/sell/onboarding';
 
 	if (role === 'seller' || role === 'admin') {
 		// Already a seller — no need to see the onboarding form.
