@@ -10,12 +10,22 @@
 		onclose: () => void;
 		categoryTree: CategoryTree[];
 		loggedIn: boolean;
+		/** Sellers get "My listings"; buyers are linked straight to onboarding. */
+		isSeller?: boolean;
 		profile: { full_name: string; avatar_url: string | null } | null;
 		/** Unread-conversation count for the Messages badge (capped display at 9+). */
 		unreadCount?: number;
 	}
 
-	let { open, onclose, categoryTree, loggedIn, profile, unreadCount = 0 }: Props = $props();
+	let {
+		open,
+		onclose,
+		categoryTree,
+		loggedIn,
+		isSeller = false,
+		profile,
+		unreadCount = 0
+	}: Props = $props();
 
 	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
 
@@ -211,7 +221,11 @@
 							{/if}
 						</a>
 						<a href="/account" class={navItem} onclick={onclose}>Account</a>
-						<a href="/sell/listings" class={navItem} onclick={onclose}>My listings</a>
+						<a
+							href={isSeller ? '/sell/listings' : '/sell/onboarding'}
+							class={navItem}
+							onclick={onclose}>My listings</a
+						>
 						<form method="POST" action="/logout" use:enhance onsubmit={onclose}>
 							<button type="submit" class={`${navItem} w-full text-left`}>Log out</button>
 						</form>

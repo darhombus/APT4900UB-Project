@@ -11,11 +11,19 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params, locals: { supabase, user } }) => {
 	if (!user) redirect(303, '/login');
 
-	const conversation = await getConversation(supabase, user.id, params.conversationId);
+	// These three are independent, so run them together instead of in series (the
+	// old sequential chain was ~5 DB round-trips before the thread could render).
+	// markRead is best-effort but still awaited here so it completes on serverless
+	// (a fire-and-forget promise can be frozen after the response); it runs in
+	// parallel, so it no longer adds to the critical path. A non-participant gets
+	// null from getConversation (→ 404); listMessages/markRead are RLS-scoped and
+	// simply no-op for them.
+	const [conversation, messages] = await Promise.all([
+		getConversation(supabase, user.id, params.conversationId),
+		listMessages(supabase, params.conversationId),
+		markRead(supabase, user.id, params.conversationId)
+	]);
 	if (!conversation) error(404, 'Conversation not found');
-
-	const messages = await listMessages(supabase, params.conversationId);
-	await markRead(supabase, user.id, params.conversationId);
 
 	return { conversation, messages, me: user.id };
 };
