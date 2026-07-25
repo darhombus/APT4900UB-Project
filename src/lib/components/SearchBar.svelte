@@ -3,14 +3,21 @@
 	// search entry point). Submitting is a normal navigation, so it's back/forward
 	// friendly, works without JS, and produces clean URLs even before hydration.
 	//
+	// Both the query box and the Filters panel REFLECT THE CURRENT URL: the bar
+	// lives in the root layout, which never re-mounts across in-app navigations, so
+	// without binding to the URL the (uncontrolled) filter inputs would keep stale
+	// selections forever — filters would appear "stuck" and not clear. Deriving from
+	// `page.url` makes the panel always show exactly what's applied, and clear when
+	// the URL clears.
+	//
 	// The Filters control floats inside the bar, just left of the search button. It
-	// is a native <details> disclosure: clicking it opens AND closes the filter panel
-	// with no JavaScript (the previous version was a plain link that only ever
-	// navigated — it "opened" but never closed). Its panel is a SEPARATE GET form
-	// (a sibling, never nested inside the search form) that submits the chosen
-	// filters to /search. `use:autoClose` adds outside-click / Escape closing when
-	// JS is available.
+	// is a native <details> disclosure (opens AND closes on click, no JS needed).
+	// Its panel is a SEPARATE GET form (a sibling, never nested in the search form);
+	// with JS, `applyFilters` builds a clean URL and keeps the current query; without
+	// JS it still GET-submits to /search. `use:autoClose` adds outside-click/Escape.
 	import { CONDITIONS, NAIROBI_AREAS } from '$lib/listing-constants';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 
 	interface CategoryTop {
 		name: string;
@@ -19,6 +26,7 @@
 	}
 
 	interface Props {
+		/** Explicit query text; defaults to the current URL's `q`. */
 		value?: string;
 		placeholder?: string;
 		class?: string;
@@ -29,12 +37,24 @@
 		categoryTree?: CategoryTop[];
 	}
 	let {
-		value = '',
+		value,
 		placeholder = 'Search listings…',
 		class: klass = '',
 		showFilters = true,
 		categoryTree = []
 	}: Props = $props();
+
+	// Current search state, read straight from the URL so the controls always mirror
+	// what's applied.
+	const sp = $derived(page.url.searchParams);
+	const q = $derived(value ?? sp.get('q') ?? '');
+	const curCategory = $derived(sp.get('category') ?? '');
+	const curLocation = $derived(sp.get('location') ?? '');
+	const curMin = $derived(sp.get('min_price') ?? '');
+	const curMax = $derived(sp.get('max_price') ?? '');
+	const curConditions = $derived(sp.getAll('condition'));
+
+	let filtersEl = $state<HTMLDetailsElement | null>(null);
 
 	/** Close the disclosure on an outside click or Escape (progressive enhancement;
 	 *  the native <details> already toggles open/closed on the summary click). */
@@ -55,6 +75,30 @@
 		};
 	}
 
+	// Apply filters as a clean navigation: keep the current text query, drop empty
+	// fields, and reset to page 1. Without JS the native GET form submits instead.
+	function applyFilters(event: SubmitEvent) {
+		event.preventDefault();
+		const fd = new FormData(event.currentTarget as HTMLFormElement);
+		// Build the query as plain string parts (no mutable URLSearchParams in a
+		// component, per the svelte/prefer-svelte-reactivity rule — same approach as
+		// $lib/filter-nav). Omit empty fields; page resets to 1 by being absent.
+		const enc = encodeURIComponent;
+		const parts: string[] = [];
+		if (q) parts.push(`q=${enc(q)}`);
+		const category = String(fd.get('category') ?? '');
+		if (category) parts.push(`category=${enc(category)}`);
+		const location = String(fd.get('location') ?? '');
+		if (location) parts.push(`location=${enc(location)}`);
+		const min = String(fd.get('min_price') ?? '').replace(/[,\s]/g, '');
+		if (min) parts.push(`min_price=${enc(min)}`);
+		const max = String(fd.get('max_price') ?? '').replace(/[,\s]/g, '');
+		if (max) parts.push(`max_price=${enc(max)}`);
+		for (const c of fd.getAll('condition')) parts.push(`condition=${enc(String(c))}`);
+		if (filtersEl) filtersEl.open = false;
+		goto('/search' + (parts.length ? `?${parts.join('&')}` : ''), { keepFocus: true });
+	}
+
 	const fieldLabel = 'mb-1 block text-xs font-semibold text-ink';
 	const control =
 		'h-10 w-full rounded-control border border-border bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/30 focus:outline-none';
@@ -63,7 +107,7 @@
 <div class={`relative flex ${klass}`}>
 	<!-- q search: the input + magnifying-glass submit share this one form. The filter
 	     disclosure is positioned over the bar (a sibling), so the input reserves room
-	     on the right (pr-20) for both the filter icon and the search button. -->
+	     on the right for both the filter icon and the search button. -->
 	<form
 		action="/search"
 		method="GET"
@@ -73,7 +117,7 @@
 		<input
 			type="search"
 			name="q"
-			{value}
+			value={q}
 			{placeholder}
 			aria-label="Search listings"
 			class={`h-11 w-full min-w-0 flex-1 bg-transparent py-2 pl-3 text-sm text-ink placeholder:text-subtle focus:outline-none ${showFilters ? 'pr-11' : 'pr-3'}`}
@@ -92,7 +136,11 @@
 
 	{#if showFilters}
 		<!-- Floats inside the bar, immediately left of the green search button. -->
-		<details use:autoClose class="absolute inset-y-0 right-[52px] flex items-stretch">
+		<details
+			bind:this={filtersEl}
+			use:autoClose
+			class="absolute inset-y-0 right-13 flex items-stretch"
+		>
 			<summary
 				aria-label="Filters"
 				title="Filters"
@@ -108,83 +156,93 @@
 				</svg>
 			</summary>
 
-			<!-- Filter panel: its own GET form (sibling of the q form, not nested). -->
+			<!-- Filter panel: its own GET form (sibling of the q form, not nested).
+			     Keyed on the URL so it re-mounts to reflect the applied filters after
+			     every navigation (and resets when they're cleared). -->
 			<div
 				class="absolute top-full right-0 z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-card border border-border bg-surface p-4 text-left shadow-menu"
 			>
-				<form action="/search" method="GET" class="space-y-3.5">
-					{#if categoryTree.length}
+				{#key sp.toString()}
+					<form action="/search" method="GET" onsubmit={applyFilters} class="space-y-3.5">
+						<!-- Preserve the active text query on the no-JS path. -->
+						<input type="hidden" name="q" value={q} />
+
+						{#if categoryTree.length}
+							<div>
+								<label class={fieldLabel} for="sb-category">Category</label>
+								<select id="sb-category" name="category" value={curCategory} class={control}>
+									<option value="">Any category</option>
+									{#each categoryTree as top (top.slug)}
+										<optgroup label={top.name}>
+											<option value={top.slug}>All {top.name}</option>
+											{#each top.children as sub (sub.slug)}
+												<option value={sub.slug}>{sub.name}</option>
+											{/each}
+										</optgroup>
+									{/each}
+								</select>
+							</div>
+						{/if}
+
 						<div>
-							<label class={fieldLabel} for="sb-category">Category</label>
-							<select id="sb-category" name="category" class={control}>
-								<option value="">Any category</option>
-								{#each categoryTree as top (top.slug)}
-									<optgroup label={top.name}>
-										<option value={top.slug}>All {top.name}</option>
-										{#each top.children as sub (sub.slug)}
-											<option value={sub.slug}>{sub.name}</option>
-										{/each}
-									</optgroup>
+							<label class={fieldLabel} for="sb-location">Location</label>
+							<select id="sb-location" name="location" value={curLocation} class={control}>
+								<option value="">Any location</option>
+								{#each NAIROBI_AREAS as area (area)}
+									<option value={area}>{area}</option>
 								{/each}
 							</select>
 						</div>
-					{/if}
 
-					<div>
-						<label class={fieldLabel} for="sb-location">Location</label>
-						<select id="sb-location" name="location" class={control}>
-							<option value="">Any location</option>
-							{#each NAIROBI_AREAS as area (area)}
-								<option value={area}>{area}</option>
-							{/each}
-						</select>
-					</div>
-
-					<div>
-						<span class={fieldLabel}>Price (KSh)</span>
-						<div class="flex items-center gap-2">
-							<input
-								name="min_price"
-								inputmode="numeric"
-								placeholder="Min"
-								aria-label="Minimum price"
-								class={control}
-							/>
-							<span class="text-subtle">–</span>
-							<input
-								name="max_price"
-								inputmode="numeric"
-								placeholder="Max"
-								aria-label="Maximum price"
-								class={control}
-							/>
+						<div>
+							<span class={fieldLabel}>Price (KSh)</span>
+							<div class="flex items-center gap-2">
+								<input
+									name="min_price"
+									inputmode="numeric"
+									placeholder="Min"
+									aria-label="Minimum price"
+									value={curMin}
+									class={control}
+								/>
+								<span class="text-subtle">–</span>
+								<input
+									name="max_price"
+									inputmode="numeric"
+									placeholder="Max"
+									aria-label="Maximum price"
+									value={curMax}
+									class={control}
+								/>
+							</div>
 						</div>
-					</div>
 
-					<fieldset>
-						<legend class={fieldLabel}>Condition</legend>
-						<div class="grid grid-cols-2 gap-x-3 gap-y-1.5">
-							{#each CONDITIONS as c (c.value)}
-								<label class="flex items-center gap-2 text-sm text-muted">
-									<input
-										type="checkbox"
-										name="condition"
-										value={c.value}
-										class="h-4 w-4 rounded-sm border-border text-brand focus:ring-2 focus:ring-brand/30"
-									/>
-									{c.label}
-								</label>
-							{/each}
-						</div>
-					</fieldset>
+						<fieldset>
+							<legend class={fieldLabel}>Condition</legend>
+							<div class="grid grid-cols-2 gap-x-3 gap-y-1.5">
+								{#each CONDITIONS as c (c.value)}
+									<label class="flex items-center gap-2 text-sm text-muted">
+										<input
+											type="checkbox"
+											name="condition"
+											value={c.value}
+											checked={curConditions.includes(c.value)}
+											class="h-4 w-4 rounded-sm border-border text-brand focus:ring-2 focus:ring-brand/30"
+										/>
+										{c.label}
+									</label>
+								{/each}
+							</div>
+						</fieldset>
 
-					<button
-						type="submit"
-						class="h-10 w-full rounded-control bg-brand text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
-					>
-						Apply filters
-					</button>
-				</form>
+						<button
+							type="submit"
+							class="h-10 w-full rounded-control bg-brand text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
+						>
+							Apply filters
+						</button>
+					</form>
+				{/key}
 			</div>
 		</details>
 	{/if}
