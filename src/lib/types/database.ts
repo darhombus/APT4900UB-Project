@@ -272,46 +272,55 @@ export type Database = {
       }
       orders: {
         Row: {
+          amount_total: number
           buyer_id: string
+          cancelled_at: string | null
+          commission_amount: number | null
+          completed_at: string | null
           created_at: string
-          currency: string
+          expired_at: string | null
           id: string
           listing_id: string
-          listing_title_snapshot: string
-          quantity: number
+          paid_at: string | null
+          paystack_authorization_url: string | null
+          paystack_reference: string
           seller_id: string
+          seller_net: number | null
           status: Database["public"]["Enums"]["order_status"]
-          total_amount: number
-          unit_price: number
-          updated_at: string
         }
         Insert: {
+          amount_total: number
           buyer_id: string
+          cancelled_at?: string | null
+          commission_amount?: number | null
+          completed_at?: string | null
           created_at?: string
-          currency?: string
+          expired_at?: string | null
           id?: string
           listing_id: string
-          listing_title_snapshot: string
-          quantity: number
+          paid_at?: string | null
+          paystack_authorization_url?: string | null
+          paystack_reference: string
           seller_id: string
+          seller_net?: number | null
           status?: Database["public"]["Enums"]["order_status"]
-          total_amount: number
-          unit_price: number
-          updated_at?: string
         }
         Update: {
+          amount_total?: number
           buyer_id?: string
+          cancelled_at?: string | null
+          commission_amount?: number | null
+          completed_at?: string | null
           created_at?: string
-          currency?: string
+          expired_at?: string | null
           id?: string
           listing_id?: string
-          listing_title_snapshot?: string
-          quantity?: number
+          paid_at?: string | null
+          paystack_authorization_url?: string | null
+          paystack_reference?: string
           seller_id?: string
+          seller_net?: number | null
           status?: Database["public"]["Enums"]["order_status"]
-          total_amount?: number
-          unit_price?: number
-          updated_at?: string
         }
         Relationships: [
           {
@@ -339,43 +348,37 @@ export type Database = {
       }
       payments: {
         Row: {
-          amount: number
           created_at: string
-          currency: string
+          event_type: string
           id: string
-          method: Database["public"]["Enums"]["payment_method"]
-          order_id: string
+          order_id: string | null
+          payload: Json
+          paystack_reference: string | null
+          processing_outcome: string
           provider: string
-          provider_ref: string | null
-          raw_payload: Json | null
-          status: Database["public"]["Enums"]["payment_status"]
-          updated_at: string
+          signature_valid: boolean
         }
         Insert: {
-          amount: number
           created_at?: string
-          currency?: string
+          event_type: string
           id?: string
-          method: Database["public"]["Enums"]["payment_method"]
-          order_id: string
+          order_id?: string | null
+          payload: Json
+          paystack_reference?: string | null
+          processing_outcome: string
           provider?: string
-          provider_ref?: string | null
-          raw_payload?: Json | null
-          status?: Database["public"]["Enums"]["payment_status"]
-          updated_at?: string
+          signature_valid: boolean
         }
         Update: {
-          amount?: number
           created_at?: string
-          currency?: string
+          event_type?: string
           id?: string
-          method?: Database["public"]["Enums"]["payment_method"]
-          order_id?: string
+          order_id?: string | null
+          payload?: Json
+          paystack_reference?: string | null
+          processing_outcome?: string
           provider?: string
-          provider_ref?: string | null
-          raw_payload?: Json | null
-          status?: Database["public"]["Enums"]["payment_status"]
-          updated_at?: string
+          signature_valid?: boolean
         }
         Relationships: [
           {
@@ -542,9 +545,114 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      cancel_pending_order: {
+        Args: { p_order_id: string }
+        Returns: {
+          amount_total: number
+          buyer_id: string
+          cancelled_at: string | null
+          commission_amount: number | null
+          completed_at: string | null
+          created_at: string
+          expired_at: string | null
+          id: string
+          listing_id: string
+          paid_at: string | null
+          paystack_authorization_url: string | null
+          paystack_reference: string
+          seller_id: string
+          seller_net: number | null
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      complete_order: {
+        Args: { p_order_id: string }
+        Returns: {
+          amount_total: number
+          buyer_id: string
+          cancelled_at: string | null
+          commission_amount: number | null
+          completed_at: string | null
+          created_at: string
+          expired_at: string | null
+          id: string
+          listing_id: string
+          paid_at: string | null
+          paystack_authorization_url: string | null
+          paystack_reference: string
+          seller_id: string
+          seller_net: number | null
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       conversation_is_sendable: {
         Args: { p_conversation_id: string }
         Returns: boolean
+      }
+      create_pending_order: {
+        Args: { p_listing_id: string; p_reference: string }
+        Returns: {
+          amount_total: number
+          buyer_id: string
+          cancelled_at: string | null
+          commission_amount: number | null
+          completed_at: string | null
+          created_at: string
+          expired_at: string | null
+          id: string
+          listing_id: string
+          paid_at: string | null
+          paystack_authorization_url: string | null
+          paystack_reference: string
+          seller_id: string
+          seller_net: number | null
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      expire_pending_order: { Args: { p_order_id: string }; Returns: boolean }
+      finalize_order_payment: {
+        Args: { p_reference: string; p_verified_amount: number }
+        Returns: {
+          amount_total: number
+          buyer_id: string
+          cancelled_at: string | null
+          commission_amount: number | null
+          completed_at: string | null
+          created_at: string
+          expired_at: string | null
+          id: string
+          listing_id: string
+          paid_at: string | null
+          paystack_authorization_url: string | null
+          paystack_reference: string
+          seller_id: string
+          seller_net: number | null
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       is_admin: { Args: never; Returns: boolean }
       is_conversation_participant: {
@@ -588,6 +696,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      set_order_authorization_url: {
+        Args: { p_order_id: string; p_url: string }
+        Returns: boolean
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_listing: { Args: { p_id: string }; Returns: boolean }
@@ -605,11 +717,9 @@ export type Database = {
       order_status:
         | "pending_payment"
         | "paid"
-        | "fulfilled"
         | "completed"
         | "cancelled"
-        | "disputed"
-        | "refunded"
+        | "expired"
       payment_method: "mpesa" | "card"
       payment_status: "initiated" | "processing" | "succeeded" | "failed"
       payout_status: "pending" | "processing" | "paid" | "failed"
@@ -757,11 +867,9 @@ export const Constants = {
       order_status: [
         "pending_payment",
         "paid",
-        "fulfilled",
         "completed",
         "cancelled",
-        "disputed",
-        "refunded",
+        "expired",
       ],
       payment_method: ["mpesa", "card"],
       payment_status: ["initiated", "processing", "succeeded", "failed"],
