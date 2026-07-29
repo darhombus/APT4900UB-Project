@@ -19,12 +19,31 @@ import type { PageServerLoad } from './$types';
  * a redirectTo that preserves ?reference — the buyer comes straight back here.
  */
 
-/** What the page renders. Derived from the order's status, never from Paystack. */
+/** What the page renders. */
 export type CallbackState = 'success' | 'pending' | 'failed';
 
-function stateFor(status: string): CallbackState {
+/**
+ * Paystack statuses that mean the charge is definitively not going to succeed.
+ * `pending`/`ongoing` are still in flight; an absent status means we couldn't
+ * ask, which is also not a decline.
+ */
+const DECLINED = new Set(['failed', 'abandoned', 'reversed']);
+
+/**
+ * The order's own status decides everything except one case: a charge Paystack
+ * has already declined.
+ *
+ * D5 has no `failed` order status — a declined charge leaves the order
+ * `pending_payment`, because the buyer can still resume and pay within the hold
+ * window. Rendering "Confirming your payment…" when we have been *told* it
+ * failed would be a lie of omission, so a known decline gets the failed state
+ * while the order itself stays pending and resumable.
+ */
+function stateFor(status: string, verifyStatus?: string): CallbackState {
 	if (status === 'paid' || status === 'completed') return 'success';
-	if (status === 'pending_payment') return 'pending';
+	if (status === 'pending_payment') {
+		return verifyStatus && DECLINED.has(verifyStatus) ? 'failed' : 'pending';
+	}
 	return 'failed'; // cancelled | expired
 }
 
@@ -37,7 +56,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, user } }) 
 	// The caller's OWN client: orders_select scopes this to orders where they are
 	// buyer or seller, so a stranger's reference simply returns nothing.
 	const ORDER_COLUMNS =
-		'id, status, buyer_id, listing_id, amount_total, paystack_reference, created_at, paid_at';
+		'id, status, buyer_id, listing_id, amount_total, paystack_reference, paystack_authorization_url, created_at, paid_at';
 	const { data: initial } = await supabase
 		.from('orders')
 		.select(ORDER_COLUMNS)
@@ -53,16 +72,18 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, user } }) 
 	if (initial.buyer_id !== user!.id) error(404, 'Order not found');
 
 	let order = initial;
+	let verifyStatus: string | undefined;
 
 	if (order.status === 'pending_payment') {
 		// The webhook hasn't landed (or hasn't been processed) yet. Verify and
 		// finalise right here rather than waiting — SAME implementation the Inngest
 		// function runs, so the two cannot drift apart.
 		try {
-			await processPaymentReference(reference, {
+			const result = await processPaymentReference(reference, {
 				paystack: getPaystackClient(),
 				admin: createSupabaseAdmin()
 			});
+			verifyStatus = result.verifyStatus;
 
 			const { data: refreshed } = await supabase
 				.from('orders')
@@ -91,12 +112,13 @@ export const load: PageServerLoad = async ({ url, locals: { supabase, user } }) 
 	const cover = listing ? coverPath(listing.listing_images) : null;
 
 	return {
-		state: stateFor(order.status),
+		state: stateFor(order.status, verifyStatus),
 		order: {
 			id: order.id,
 			status: order.status,
 			amountTotal: order.amount_total,
 			reference: order.paystack_reference,
+			authorizationUrl: order.paystack_authorization_url,
 			paidAt: order.paid_at
 		},
 		listing: {

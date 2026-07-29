@@ -26,6 +26,13 @@ export interface ProcessResult {
 	outcome: ProcessOutcome;
 	orderId: string | null;
 	reason?: string;
+	/**
+	 * Paystack's transaction status, when we got an answer at all. Undefined
+	 * means verify was unreachable or refused — which is NOT the same as a
+	 * declined charge, and callers that render UI need to tell those apart:
+	 * "your payment didn't go through" vs "we're still checking".
+	 */
+	verifyStatus?: string;
 }
 
 export interface ProcessDeps {
@@ -133,7 +140,8 @@ export async function processPaymentReference(
 		return {
 			outcome,
 			orderId: order?.id ?? null,
-			reason: decision.action === 'stop' ? decision.reason : undefined
+			reason: decision.action === 'stop' ? decision.reason : undefined,
+			verifyStatus: verify?.status
 		};
 	}
 
@@ -164,5 +172,5 @@ export async function processPaymentReference(
 		processing_outcome: 'finalized'
 	});
 
-	return { outcome: 'finalized', orderId: order!.id };
+	return { outcome: 'finalized', orderId: order!.id, verifyStatus: verify?.status };
 }

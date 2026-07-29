@@ -9,18 +9,29 @@
 	// Money is stored as integer cents (D8); Price takes major units.
 	const amount = $derived(data.order.amountTotal / 100);
 
+	// A declined charge leaves the order pending_payment and still resumable (D5
+	// has no failed order status), so it needs different copy — and a way back in
+	// — from a checkout that is genuinely over.
+	const declined = $derived(data.order.status === 'pending_payment');
+
+	const failedHeading = $derived(
+		declined ? 'Payment didn’t go through' : 'This checkout is closed'
+	);
+
 	const heading = $derived(
-		{
-			success: 'Payment received',
-			pending: 'Confirming your payment…',
-			failed: 'This checkout is closed'
-		}[data.state]
+		data.state === 'success'
+			? 'Payment received'
+			: data.state === 'pending'
+				? 'Confirming your payment…'
+				: failedHeading
 	);
 
 	const failedDetail = $derived(
-		data.order.status === 'expired'
-			? 'The 30-minute checkout window passed before payment came through.'
-			: 'This checkout was cancelled, so nothing was charged.'
+		declined
+			? 'Nothing was charged. You can try again while this checkout is still open.'
+			: data.order.status === 'expired'
+				? 'The 30-minute checkout window passed before payment came through.'
+				: 'This checkout was cancelled, so nothing was charged.'
 	);
 
 	// "Check again" re-requests this same URL — the load re-verifies. Built from
@@ -97,6 +108,11 @@
 				<Button href="/" variant="secondary" class="w-full">Keep browsing</Button>
 			{:else if data.state === 'pending'}
 				<Button href={recheckHref} class="w-full">Check again</Button>
+				<Button href={`/listings/${data.listing.id}`} variant="secondary" class="w-full">
+					Back to the listing
+				</Button>
+			{:else if declined && data.order.authorizationUrl}
+				<Button href={data.order.authorizationUrl} class="w-full">Try payment again</Button>
 				<Button href={`/listings/${data.listing.id}`} variant="secondary" class="w-full">
 					Back to the listing
 				</Button>
