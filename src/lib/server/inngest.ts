@@ -1,4 +1,4 @@
-import { Inngest, eventType, staticSchema, type InngestFunction } from 'inngest';
+import { Inngest, eventType, staticSchema } from 'inngest';
 import { dev } from '$app/environment';
 import { env } from '$lib/server/env';
 
@@ -66,9 +66,7 @@ export const inngest = new Inngest({
 	signingKey: env.INNGEST_SIGNING_KEY || undefined
 });
 
-/**
- * Every Inngest function in the app, registered by the serve route. Sections 6
- * and 7 add to this: process-payment-event, then expire-order. An empty list is
- * a valid registration — the dev server still discovers the app.
- */
-export const inngestFunctions: InngestFunction.Any[] = [];
+// Functions live in $lib/server/inngest-functions and are registered by the
+// serve route. They are deliberately NOT imported here: this module is what
+// request-path code imports to SEND events, and it must not drag the processing
+// code — or the service-role client — along with it.

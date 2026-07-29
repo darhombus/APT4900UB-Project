@@ -1,5 +1,6 @@
 import { serve } from 'inngest/sveltekit';
-import { inngest, inngestFunctions } from '$lib/server/inngest';
+import { inngest } from '$lib/server/inngest';
+import { processPaymentEvent } from '$lib/server/inngest-functions';
 
 /**
  * Inngest's serve endpoint — the single URL Inngest talks to.
@@ -9,8 +10,8 @@ import { inngest, inngestFunctions } from '$lib/server/inngest';
  * PUT  — registration/sync, triggered from the Inngest dashboard or CLI.
  * POST — invocation: Inngest calls back here to execute a function step.
  *
- * Registered functions live in $lib/server/inngest so there is one list;
- * Sections 6 and 7 populate it. An empty list is a valid registration.
+ * Registered functions live in $lib/server/inngest-functions; Section 7 adds
+ * expire-order alongside process-payment-event.
  *
  * The signing key authenticates Inngest's calls to us. In inngest v4 it lives on
  * the client rather than here — see $lib/server/inngest. It is undefined locally
@@ -21,5 +22,5 @@ import { inngest, inngestFunctions } from '$lib/server/inngest';
  */
 export const { GET, POST, PUT } = serve({
 	client: inngest,
-	functions: inngestFunctions
+	functions: [processPaymentEvent]
 });

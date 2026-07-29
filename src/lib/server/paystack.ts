@@ -59,6 +59,36 @@ export interface VerifyResult {
 	raw: unknown;
 }
 
+/**
+ * A non-OK response from Paystack, carrying the HTTP status so callers can tell
+ * a business-terminal failure from an infrastructure one.
+ *
+ * This distinction is load-bearing in Section 6: an unknown reference comes back
+ * as HTTP 400 ("Transaction reference not found") and must NOT be retried, while
+ * a 401, 429 or 5xx must be. Without the status, callers would be reduced to
+ * matching on message text.
+ */
+export class PaystackApiError extends Error {
+	constructor(
+		readonly status: number,
+		readonly paystackMessage: string,
+		path: string
+	) {
+		super(`Paystack ${path} failed (HTTP ${status}): ${paystackMessage}`);
+		this.name = 'PaystackApiError';
+	}
+
+	/**
+	 * True when Paystack is telling us the request itself is not satisfiable —
+	 * a reference it has never seen. Retrying cannot change the answer.
+	 * 401/403 (bad key) and 429/5xx are deliberately excluded: those are
+	 * configuration or availability problems that should retry and stay loud.
+	 */
+	get isTerminal(): boolean {
+		return this.status === 400 || this.status === 404;
+	}
+}
+
 export interface PaystackClient {
 	initializeTransaction(params: InitializeParams): Promise<InitializeResult>;
 	verifyTransaction(reference: string): Promise<VerifyResult>;
@@ -137,11 +167,9 @@ export class RealPaystackClient implements PaystackClient {
 			}
 		});
 
-		const body = (await response.json()) as Record<string, unknown>;
+		const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 		if (!response.ok || body.status !== true) {
-			throw new Error(
-				`Paystack ${path} failed (HTTP ${response.status}): ${String(body.message ?? 'unknown error')}`
-			);
+			throw new PaystackApiError(response.status, String(body.message ?? 'unknown error'), path);
 		}
 		return body;
 	}
