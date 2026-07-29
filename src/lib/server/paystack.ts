@@ -255,6 +255,15 @@ export class MockPaystackClient implements PaystackClient {
 	verifyWebhookSignature(rawBody: string, signatureHeader: string | null | undefined): boolean {
 		return verifySignature(this.secretKey, rawBody, signatureHeader);
 	}
+
+	/**
+	 * Sign a body the way Paystack would. Only the mock has this: the dev mock-pay
+	 * page uses it to post a GENUINELY signed webhook to our own endpoint, so the
+	 * local flow exercises the real verification path instead of bypassing it.
+	 */
+	signAsPaystack(rawBody: string): string {
+		return createHmac('sha512', this.secretKey).update(rawBody, 'utf8').digest('hex');
+	}
 }
 
 /**
