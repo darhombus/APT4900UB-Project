@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { env as dynamicEnv } from '$env/dynamic/private';
 import { env } from '$lib/server/env';
+import { readRuntimeEnv } from '$lib/server/runtime-env';
 
 /**
  * ⚠️ SERVER-ONLY. A thin, typed Paystack client with exactly three capabilities:
@@ -94,16 +94,6 @@ export interface PaystackClient {
 	verifyTransaction(reference: string): Promise<VerifyResult>;
 	/** Pure and synchronous — never throws, whatever the header contains. */
 	verifyWebhookSignature(rawBody: string, signatureHeader: string | null | undefined): boolean;
-}
-
-/**
- * R-4: the two test-only variables are read through `$env/dynamic/private` so no
- * Vercel scope gains a build-time requirement — they are deliberately absent
- * from the static schema in `env.ts`. The `process.env` fallback covers runtimes
- * where the virtual module snapshots at import time (Vitest, one-off scripts).
- */
-function readRuntimeEnv(name: string): string | undefined {
-	return dynamicEnv[name] ?? process.env[name];
 }
 
 function assertIntegerCents(amountCents: number): void {

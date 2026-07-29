@@ -1,7 +1,8 @@
 import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { getPaystackClient } from '$lib/server/paystack';
 import { processPaymentReference } from '$lib/server/payment-processing';
-import { inngest, paymentEventReceived } from '$lib/server/inngest';
+import { orderHoldDuration } from '$lib/server/runtime-env';
+import { inngest, orderCreated, paymentEventReceived } from '$lib/server/inngest';
 
 /**
  * Inngest functions (Checkout PRD — Sections 6 and 7).
@@ -48,5 +49,45 @@ export const processPaymentEvent = inngest.createFunction(
 		);
 
 		return { ...result, reference, eventType };
+	}
+);
+
+/**
+ * Release a hold that was never paid for (D3).
+ *
+ * Sleeps out the hold window, then asks the database to expire the order. The
+ * race with a payment arriving late in the window is resolved *in the database*,
+ * not here: `expire_pending_order` only touches rows still in `pending_payment`,
+ * so a paid order is untouched and the call returns false. Payment always wins,
+ * and losing the race is a success — there was simply nothing to expire.
+ *
+ * No audit row: this is not a payment event, and `payments` is the Paystack
+ * trail (D9). The order's own `expired_at` is the record.
+ *
+ * Note on `step.sleep`: Inngest does not hold a process open for the duration —
+ * the run is suspended and resumed, so a 30-minute hold costs nothing while it
+ * waits and survives a deploy in the middle of it.
+ */
+export const expireOrder = inngest.createFunction(
+	{ id: 'expire-order', retries: 3, triggers: [orderCreated] },
+	async ({ event, step }) => {
+		const { orderId } = event.data;
+
+		// Read inside the handler so the value is resolved at execution time, which
+		// is what lets a test set ORDER_HOLD_MINUTES low without a rebuild.
+		await step.sleep('hold-window', orderHoldDuration());
+
+		const expired = await step.run('expire', async () => {
+			const admin = createSupabaseAdmin();
+			// Service-role only: expire_pending_order revokes EXECUTE from anon and
+			// authenticated (R-10).
+			const { data, error } = await admin.rpc('expire_pending_order', { p_order_id: orderId });
+			// Database trouble is infrastructure — throw so Inngest retries. A
+			// no-op (data === false) is a normal outcome and returns cleanly.
+			if (error) throw new Error(`expire_pending_order failed: ${error.message}`);
+			return data === true;
+		});
+
+		return { orderId, expired };
 	}
 );
