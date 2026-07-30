@@ -371,6 +371,38 @@ export async function transitionListing(
 		}
 	}
 
+	if (transition === 'relist') {
+		// R-2: a listing sold THROUGH CHECKOUT can never be relisted — its order is a
+		// real transaction against this listing, and relisting would let a second
+		// buyer purchase the same item. Only a manually "Mark sold" listing (no order
+		// behind it) may go back on sale.
+		//
+		// Consequence worth knowing: checkout-sold listings are permanently immutable,
+		// which is exactly why orders carry no title/price snapshot — the order pages
+		// join live listing data and it cannot drift.
+		//
+		// Read with the caller's own client: orders_select grants the seller access to
+		// orders where seller_id = auth.uid(), and the caller is the seller (verified
+		// above), so no service-role escalation is needed here.
+		const { data: blocking, error: ordersErr } = await supabase
+			.from('orders')
+			.select('id')
+			.eq('listing_id', listing.id)
+			.in('status', ['paid', 'completed'])
+			.limit(1);
+
+		// Fail closed: if we can't prove there's no order, don't relist.
+		if (ordersErr) {
+			return fail(500, { id: listingId, transitionError: 'Could not relist the listing.' });
+		}
+		if (blocking && blocking.length > 0) {
+			return fail(409, {
+				id: listingId,
+				transitionError: 'This listing was sold through checkout and can’t be relisted.'
+			});
+		}
+	}
+
 	const patch: Database['public']['Tables']['listings']['Update'] = { status: plan.to };
 	if (plan.publishedAt === 'now' || (plan.publishedAt === 'first' && !listing.published_at)) {
 		patch.published_at = new Date().toISOString();

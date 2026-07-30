@@ -29,6 +29,14 @@
 	const canMessage = $derived(listing.status === 'active' && !data.isOwner);
 	const loginHref = $derived(`/login?redirectTo=${encodeURIComponent(`/listings/${listing.id}`)}`);
 
+	// Buy Now (D1/D3) gates on exactly the same conditions as the message button —
+	// active listing, not your own — and then splits on the checkout hold:
+	//   held by me    → resume the payment, or cancel it
+	//   held by other → disabled, because create_pending_order would reject it
+	//   no hold       → buy (form POST for signed-in, login link for anonymous)
+	const canBuy = $derived(listing.status === 'active' && !data.isOwner);
+	const hold = $derived(data.checkoutHold);
+
 	let messaging = $state(false);
 	const onMessage: SubmitFunction = () => {
 		messaging = true;
@@ -36,6 +44,34 @@
 			await update();
 			if (result.type === 'failure') notifyFromResult(result);
 			messaging = false;
+		};
+	};
+
+	let buying = $state(false);
+	const onBuy: SubmitFunction = () => {
+		buying = true;
+		return async ({ result, update }) => {
+			// Paystack's hosted page is an EXTERNAL url, and goto() — which enhance
+			// uses for redirects — refuses those. Hand it to the browser instead.
+			// Without JS the native form POST follows the 303 by itself, so both
+			// paths end up in the same place (D2).
+			if (result.type === 'redirect') {
+				window.location.assign(result.location);
+				return;
+			}
+			await update();
+			if (result.type === 'failure') notifyFromResult(result);
+			buying = false;
+		};
+	};
+
+	let cancelling = $state(false);
+	const onCancel: SubmitFunction = () => {
+		cancelling = true;
+		return async ({ result, update }) => {
+			await update();
+			notifyFromResult(result, { success: 'Checkout cancelled.' });
+			cancelling = false;
 		};
 	};
 
@@ -158,16 +194,63 @@
 			{/if}
 			<p class="mt-2 text-sm text-muted">{listing.location_area ?? 'Nairobi'} · {postedLabel}</p>
 
-			{#if canMessage}
+			{#if canBuy}
 				<div class="mt-5">
+					{#if hold?.heldByMe}
+						<div class="flex flex-col gap-2 sm:flex-row">
+							{#if hold.authorizationUrl}
+								<Button href={hold.authorizationUrl} class="w-full sm:w-auto">Resume payment</Button
+								>
+							{/if}
+							<form method="POST" action="?/cancelCheckout" use:enhance={onCancel}>
+								<input type="hidden" name="orderId" value={hold.orderId} />
+								<Button
+									type="submit"
+									variant="secondary"
+									loading={cancelling}
+									class="w-full sm:w-auto"
+								>
+									Cancel checkout
+								</Button>
+							</form>
+						</div>
+						<p class="mt-2 text-sm text-muted">
+							{hold.authorizationUrl
+								? 'Your checkout is still open. It expires 30 minutes after you started it.'
+								: 'Your checkout is open but its payment link is missing. Cancel it to start again.'}
+						</p>
+					{:else if hold}
+						<Button disabled class="w-full sm:w-auto">Checkout in progress</Button>
+						<p class="mt-2 text-sm text-muted">
+							Someone else is paying for this item. Check back in a few minutes.
+						</p>
+					{:else if data.session}
+						<form method="POST" action="?/buy" use:enhance={onBuy}>
+							<Button type="submit" loading={buying} class="w-full sm:w-auto">Buy now</Button>
+						</form>
+					{:else}
+						<Button href={loginHref} class="w-full sm:w-auto">Buy now</Button>
+					{/if}
+				</div>
+			{/if}
+
+			{#if canMessage}
+				<div class="mt-3">
 					{#if data.session}
 						<form method="POST" action="?/message" use:enhance={onMessage}>
-							<Button type="submit" loading={messaging} class="w-full sm:w-auto">
+							<Button
+								type="submit"
+								variant="secondary"
+								loading={messaging}
+								class="w-full sm:w-auto"
+							>
 								{data.existingConversationId ? 'View conversation' : 'Message seller'}
 							</Button>
 						</form>
 					{:else}
-						<Button href={loginHref} class="w-full sm:w-auto">Message seller</Button>
+						<Button href={loginHref} variant="secondary" class="w-full sm:w-auto">
+							Message seller
+						</Button>
 					{/if}
 				</div>
 			{/if}

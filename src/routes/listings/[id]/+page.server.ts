@@ -3,6 +3,12 @@ import { loadCategoryTree } from '$lib/server/categories';
 import { publicUrl } from '$lib/listing-images';
 import { findSubcategory } from '$lib/validation/listings';
 import { findConversation, startConversation } from '$lib/server/messaging';
+import {
+	cancelCheckout,
+	findPendingHold,
+	startCheckout,
+	toCheckoutHold
+} from '$lib/server/checkout';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, user } }) => {
@@ -59,7 +65,23 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, user } 
 			? await findConversation(supabase, listing.id, user.id)
 			: null;
 
-	return { listing, images, seller: sellerRes.data, breadcrumb, isOwner, existingConversationId };
+	// D3 — is a checkout already in progress on this listing? Only meaningful
+	// while it's active (Buy Now shows nowhere else), so only looked up there.
+	// `toCheckoutHold` strips the holder's identity before it reaches the browser.
+	const checkoutHold =
+		listing.status === 'active'
+			? toCheckoutHold(await findPendingHold(listing.id), user?.id)
+			: null;
+
+	return {
+		listing,
+		images,
+		seller: sellerRes.data,
+		breadcrumb,
+		isOwner,
+		existingConversationId,
+		checkoutHold
+	};
 };
 
 export const actions: Actions = {
@@ -73,5 +95,31 @@ export const actions: Actions = {
 		if (!result.ok) return fail(400, { formError: result.error });
 
 		redirect(303, `/messages/${result.conversationId}`);
+	},
+
+	// Start checkout: take the hold, initialize with Paystack, and hand the buyer
+	// off to Paystack's hosted page (D2 — redirect flow, no inline popup, so this
+	// works as a plain form POST with no JavaScript).
+	buy: async ({ params, url, locals: { supabase, user } }) => {
+		if (!user) redirect(303, `/login?redirectTo=${encodeURIComponent(url.pathname)}`);
+
+		const callbackUrl = new URL('/checkout/callback', url.origin).toString();
+		const result = await startCheckout(supabase, user, params.id, callbackUrl);
+		if (!result.ok) return fail(400, { formError: result.error });
+
+		redirect(303, result.authorizationUrl);
+	},
+
+	// Buyer releases their own hold, re-enabling Buy Now for everyone.
+	cancelCheckout: async ({ url, request, locals: { supabase, user } }) => {
+		if (!user) redirect(303, `/login?redirectTo=${encodeURIComponent(url.pathname)}`);
+
+		const orderId = String((await request.formData()).get('orderId') ?? '');
+		if (!orderId) return fail(400, { formError: 'Could not cancel that checkout.' });
+
+		const result = await cancelCheckout(supabase, orderId);
+		if (!result.ok) return fail(400, { formError: result.error });
+
+		return { success: true, message: 'Checkout cancelled.' };
 	}
 };
