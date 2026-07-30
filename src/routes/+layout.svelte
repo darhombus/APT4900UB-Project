@@ -358,6 +358,7 @@
 										{/if}
 									</a>
 									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
+									<a href="/account/orders" class={menuItem} onclick={closeMenu}>Orders</a>
 									<!-- Link buyers straight to onboarding: /sell/listings would just
 									     server-redirect them there (an extra round-trip). -->
 									<a
@@ -365,6 +366,12 @@
 										class={menuItem}
 										onclick={closeMenu}>My listings</a
 									>
+									{#if isSeller}
+										<!-- Sellers only: /sell/sales would bounce a buyer to onboarding,
+										     so don't offer it to them at all. No counter — that's
+										     notification-phase territory (D11). -->
+										<a href="/sell/sales" class={menuItem} onclick={closeMenu}>Sales</a>
+									{/if}
 									<div class="my-1 border-t border-border"></div>
 									<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>
 										<button type="submit" class={`${menuItem} w-full text-left`}>Log out</button>
