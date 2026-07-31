@@ -34,6 +34,36 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		sendPaymentEvent: async (input) => {
 			await inngest.send(paymentEventReceived.create(input));
+		},
+
+		// Payouts Section 8. Wiring only — the decision logic lives in $lib/server/webhook
+		// alongside the charge logic, and the charge path is unaffected by its presence.
+		payouts: {
+			// P8's direct verify. Through the client abstraction, so PAYSTACK_MOCK
+			// governs it exactly as it governs charge verification.
+			verifyTransfer: async (reference) => getPaystackClient().verifyTransfer(reference),
+
+			findPayoutByReference: async (reference) => {
+				const admin = createSupabaseAdmin();
+				const { data, error } = await admin
+					.from('payouts')
+					.select('id, status')
+					.eq('paystack_transfer_reference', reference)
+					.maybeSingle();
+				if (error) throw new Error(`payout lookup failed: ${error.message}`);
+				return data;
+			},
+
+			// The ONLY write path to payouts.status (P3). Its exception IS the
+			// out-of-order guard, so it is deliberately allowed to throw.
+			transitionPayout: async (payoutId, newStatus) => {
+				const admin = createSupabaseAdmin();
+				const { error } = await admin.rpc('transition_payout_status', {
+					p_payout_id: payoutId,
+					p_new_status: newStatus
+				});
+				if (error) throw new Error(error.message);
+			}
 		}
 	});
 
