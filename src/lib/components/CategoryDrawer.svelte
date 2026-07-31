@@ -221,11 +221,13 @@
 							{/if}
 						</a>
 						<a href="/account" class={navItem} onclick={onclose}>Account</a>
-						<a
-							href={isSeller ? '/sell/listings' : '/sell/onboarding'}
-							class={navItem}
-							onclick={onclose}>My listings</a
-						>
+						<!-- Sellers only. A buyer's single route into selling is the
+						     "Sell on MySoko" link above, which lands on onboarding via the
+						     /sell guard — offering "My listings" as well gave them two
+						     entries pointing at the same flow. -->
+						{#if isSeller}
+							<a href="/sell/listings" class={navItem} onclick={onclose}>My listings</a>
+						{/if}
 						<form method="POST" action="/logout" use:enhance onsubmit={onclose}>
 							<button type="submit" class={`${navItem} w-full text-left`}>Log out</button>
 						</form>
