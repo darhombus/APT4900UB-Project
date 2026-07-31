@@ -30,6 +30,15 @@
 			<span class="text-sm text-muted">Earned from completed orders</span>
 			<Price amount={centsToMajor(data.completedNet)} size="lg" />
 		</Card>
+		<!-- N2 — this is lifetime earnings; /sell/payouts shows what is withdrawable
+		     TODAY, which is smaller once the hold and past payouts are taken off. The
+		     two figures differ by design, and a seller comparing them should be told
+		     why rather than left to suspect a bug. Copy only: the card above, the
+		     query and the sum are unchanged. -->
+		<p class="mt-2 text-xs text-subtle">
+			Everything you've earned, all time. For what you can withdraw right now, see
+			<a href="/sell/payouts" class="underline hover:text-muted">payouts</a>.
+		</p>
 
 		<!-- Cards on small screens, a table from sm up: the split is five numbers
 		     per row, which a phone-width table can't show without scrolling. -->
