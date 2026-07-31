@@ -208,8 +208,10 @@ export const actions: Actions = {
 			});
 		}
 
-		// POST-redirect-get so a refresh cannot re-submit.
-		redirect(303, '/sell/payouts?saved=1');
+		// POST-redirect-get so a refresh cannot re-submit. No query flag: success is
+		// a toast on the JS path, and on the no-JS path the rendered masked number
+		// is the confirmation.
+		redirect(303, '/sell/payouts');
 	},
 
 	/**
@@ -292,6 +294,6 @@ export const actions: Actions = {
 			);
 		}
 
-		redirect(303, '/sell/payouts?requested=1');
+		redirect(303, '/sell/payouts');
 	}
 };
