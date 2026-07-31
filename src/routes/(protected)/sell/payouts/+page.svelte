@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { applyAction, enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { Alert, Badge, Button, Card, Input, Label, Price } from '$lib/components/ui';
 	import { centsToMajor } from '$lib/orders';
 	import { payoutOriginLabel, payoutStatusLabel, payoutStatusVariant } from '$lib/payouts';
@@ -10,26 +12,40 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	/**
-	 * Outcomes are toasts; field-level errors stay inline as an Alert, per the
-	 * convention in $lib/toast.svelte.
+	 * Success feedback, once, on BOTH paths — a toast can only exist where there
+	 * is JavaScript, so the no-JS path needs its own answer rather than none.
 	 *
-	 * Both actions REDIRECT on success (post-redirect-get, so a refresh cannot
-	 * re-submit), which is why this uses applyAction rather than update — update
-	 * does not follow a redirect result. Progressive enhancement is intact: with
-	 * JS off the form is a plain POST, the server still redirects, and the page
-	 * shows the new state. Only the toast is lost, and the state itself is the
-	 * confirmation.
+	 * The server always redirects to ?saved=1 / ?requested=1 (post-redirect-get,
+	 * so a refresh cannot re-submit). What differs is who consumes that flag:
+	 *
+	 *   no JS — the browser follows the redirect, the flag survives in the URL,
+	 *           and the banner below renders it. No toast is possible.
+	 *   JS    — enhance intercepts, fires the toast, and navigates to the CLEAN
+	 *           url instead of following the server's target, so the flag never
+	 *           lands and the banner never appears.
+	 *
+	 * Exactly one confirmation either way, never both. Field-level errors stay
+	 * inline as an Alert on both paths, per the convention in $lib/toast.svelte.
 	 */
-	function toastOnSuccess(message: string): SubmitFunction {
+	const savedFlag = $derived(page.url.searchParams.get('saved') === '1');
+	const requestedFlag = $derived(page.url.searchParams.get('requested') === '1');
+
+	function onSuccess(message: string): SubmitFunction {
 		return () =>
 			async ({ result }) => {
-				if (result.type === 'redirect') toast.success(message);
+				if (result.type === 'redirect') {
+					toast.success(message);
+					// Deliberately NOT applyAction: that would follow the server's
+					// redirect to ?saved=1 and render the banner alongside the toast.
+					await goto('/sell/payouts', { invalidateAll: true, replaceState: true });
+					return;
+				}
 				await applyAction(result);
 			};
 	}
 
-	const onSaveRecipient = toastOnSuccess('Payout number saved.');
-	const onWithdraw = toastOnSuccess('Withdrawal started.');
+	const onSaveRecipient = onSuccess('Payout number saved.');
+	const onWithdraw = onSuccess('Withdrawal started.');
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -53,6 +69,17 @@
 <main class="mx-auto max-w-2xl px-4 py-6 sm:py-8">
 	<h1 class="font-display text-2xl font-bold text-ink">Payouts</h1>
 	<p class="mt-1 text-sm text-muted">Your earnings and where they're sent.</p>
+
+	<!-- No-JS success feedback. On the JS path enhance strips the flag before
+	     navigating, so this never renders there and the toast is the only signal. -->
+	{#if savedFlag}
+		<Alert variant="success" class="mt-6">Payout number saved.</Alert>
+	{/if}
+	{#if requestedFlag}
+		<Alert variant="success" class="mt-6">
+			Withdrawal started. It usually arrives within a few minutes.
+		</Alert>
+	{/if}
 
 	{#if form?.formError}
 		<Alert variant="error" class="mt-6">{form.formError}</Alert>
