@@ -1,6 +1,12 @@
 import { serve } from 'inngest/sveltekit';
 import { inngest } from '$lib/server/inngest';
-import { expireOrder, processPaymentEvent } from '$lib/server/inngest-functions';
+import {
+	autoCompleteOrder,
+	expireOrder,
+	processPaymentEvent,
+	payoutInitiateTransfer,
+	payoutWeeklySweep
+} from '$lib/server/inngest-functions';
 
 /**
  * Inngest's serve endpoint — the single URL Inngest talks to.
@@ -21,5 +27,11 @@ import { expireOrder, processPaymentEvent } from '$lib/server/inngest-functions'
  */
 export const { GET, POST, PUT } = serve({
 	client: inngest,
-	functions: [processPaymentEvent, expireOrder]
+	functions: [
+		processPaymentEvent,
+		expireOrder,
+		autoCompleteOrder,
+		payoutInitiateTransfer,
+		payoutWeeklySweep
+	]
 });

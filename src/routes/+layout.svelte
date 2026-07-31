@@ -371,6 +371,7 @@
 										     so don't offer it to them at all. No counter — that's
 										     notification-phase territory (D11). -->
 										<a href="/sell/sales" class={menuItem} onclick={closeMenu}>Sales</a>
+										<a href="/sell/payouts" class={menuItem} onclick={closeMenu}>Payouts</a>
 									{/if}
 									<div class="my-1 border-t border-border"></div>
 									<form method="POST" action="/logout" use:enhance onsubmit={closeMenu}>

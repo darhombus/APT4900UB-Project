@@ -60,6 +60,73 @@ export interface VerifyResult {
 }
 
 /**
+ * Creating a transfer recipient (Payouts PRD — Section 5, P1).
+ *
+ * `provider` is Paystack's Kenyan mobile-money slug. It is a WIRE VALUE and
+ * whatever Paystack's docs specify wins — the project's "Mpesa" prose spelling
+ * does not apply to an API parameter.
+ */
+export interface TransferRecipientParams {
+	/** Full MSISDN in international form, e.g. 254712345678. */
+	accountNumber: string;
+	/** Shown in the Paystack dashboard; the seller's display name. */
+	name: string;
+	provider?: string;
+}
+
+export interface TransferRecipientResult {
+	recipientCode: string;
+	raw: unknown;
+}
+
+/**
+ * Initiating a transfer (Payouts PRD — Section 7, P7).
+ *
+ * AMOUNT UNIT — confirmed against Paystack's Transfer API docs: `amount` is in
+ * the currency's SUBUNIT, the same convention as the Transaction API. For KES
+ * the subunit is cents, and `payouts.transfer_amount_kes_cents` is already
+ * integer KES cents (D8), so the value passes through with NO conversion. The
+ * existing `initializeTransaction` above sends `amount: params.amountCents`
+ * unconverted for the same reason — this is the project's settled convention,
+ * not a new judgement.
+ */
+export interface TransferParams {
+	/** Integer KES cents == Paystack's subunit. Passed through unconverted. */
+	amountKesCents: number;
+	recipientCode: string;
+	/** The payout row's UUID (P7) — the idempotency key. */
+	reference: string;
+	reason?: string;
+}
+
+export interface TransferResult {
+	/** Paystack's own transfer identifier, e.g. TRF_xxxxx. */
+	transferCode: string;
+	/** Paystack's transfer status at initiation: pending | otp | success | failed. */
+	status: string;
+	raw: unknown;
+}
+
+/**
+ * A normalised transfer-verify response (Payouts PRD — Section 8, P8).
+ *
+ * ENDPOINT — confirmed against Paystack's Transfer API docs: `GET
+ * /transfer/verify/:reference`, keyed by OUR reference (the payout UUID, P7)
+ * rather than by transfer_code. Using our own reference matters: it is the value
+ * we control and unique-indexed, so a verify can be performed for any payout row
+ * without first having stored anything Paystack gave back.
+ */
+export interface TransferVerifyResult {
+	/** pending | otp | success | failed | reversed | abandoned. */
+	status: string;
+	reference: string;
+	/** Integer minor units as Paystack reported them. */
+	amountCents: number;
+	currency: string;
+	raw: unknown;
+}
+
+/**
  * A non-OK response from Paystack, carrying the HTTP status so callers can tell
  * a business-terminal failure from an infrastructure one.
  *
@@ -87,6 +154,22 @@ export class PaystackApiError extends Error {
 	get isTerminal(): boolean {
 		return this.status === 400 || this.status === 404;
 	}
+
+	/**
+	 * Is Paystack refusing this because the reference has already been used?
+	 *
+	 * P7 makes the payout UUID the transfer reference precisely so a retry cannot
+	 * double-pay: Paystack refuses the second attempt. That refusal means "the
+	 * transfer already exists", which for the initiation step is SUCCESS, not
+	 * failure — so it must be told apart from a real rejection.
+	 *
+	 * Message-matched because Paystack does not give duplicates a distinct code;
+	 * the wording is checked case-insensitively and covers the phrasings their
+	 * transfer endpoint uses for an already-seen reference.
+	 */
+	get isDuplicateReference(): boolean {
+		return /duplicate|already\s+exist|has\s+been\s+used/i.test(this.paystackMessage);
+	}
 }
 
 export interface PaystackClient {
@@ -94,7 +177,24 @@ export interface PaystackClient {
 	verifyTransaction(reference: string): Promise<VerifyResult>;
 	/** Pure and synchronous — never throws, whatever the header contains. */
 	verifyWebhookSignature(rawBody: string, signatureHeader: string | null | undefined): boolean;
+	/** Payouts Section 5 (P1) — register a seller's Mpesa number as a transfer destination. */
+	createTransferRecipient(params: TransferRecipientParams): Promise<TransferRecipientResult>;
+	/** Payouts Section 7 (P7) — send money to a registered recipient. */
+	initiateTransfer(params: TransferParams): Promise<TransferResult>;
+	/** Payouts Section 8 (P8) — the direct verify that must agree before any terminal transition. */
+	verifyTransfer(reference: string): Promise<TransferVerifyResult>;
 }
+
+/**
+ * Paystack's mobile-money provider slug for Kenya. Confirmed against Paystack's
+ * Transfers documentation for Kenyan mobile money, where the recipient `type` is
+ * `mobile_money` and `bank_code` carries the provider — `MPESA` for Safaricom.
+ *
+ * A wire value, so it keeps Paystack's own spelling rather than the project's
+ * unhyphenated "Mpesa" prose convention. Overridable per call so a docs change
+ * does not require a code change in the calling layer.
+ */
+export const PAYSTACK_MPESA_PROVIDER = 'MPESA' as const;
 
 function assertIntegerCents(amountCents: number): void {
 	if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
@@ -205,6 +305,62 @@ export class RealPaystackClient implements PaystackClient {
 	verifyWebhookSignature(rawBody: string, signatureHeader: string | null | undefined): boolean {
 		return verifySignature(this.secretKey, rawBody, signatureHeader);
 	}
+
+	async createTransferRecipient(params: TransferRecipientParams): Promise<TransferRecipientResult> {
+		const body = await this.request('/transferrecipient', {
+			method: 'POST',
+			body: JSON.stringify({
+				type: 'mobile_money',
+				name: params.name,
+				account_number: params.accountNumber,
+				bank_code: params.provider ?? PAYSTACK_MPESA_PROVIDER,
+				currency: PAYSTACK_CURRENCY
+			})
+		});
+
+		const data = (body.data ?? {}) as Record<string, unknown>;
+		return { recipientCode: String(data.recipient_code ?? ''), raw: body };
+	}
+
+	async initiateTransfer(params: TransferParams): Promise<TransferResult> {
+		// No unit conversion: Paystack's `amount` is the currency subunit, which for
+		// KES is cents, and our column is already integer KES cents (D8).
+		assertIntegerCents(params.amountKesCents);
+
+		const body = await this.request('/transfer', {
+			method: 'POST',
+			body: JSON.stringify({
+				source: 'balance',
+				amount: params.amountKesCents,
+				recipient: params.recipientCode,
+				reference: params.reference,
+				currency: PAYSTACK_CURRENCY,
+				reason: params.reason ?? 'MySoko seller payout'
+			})
+		});
+
+		const data = (body.data ?? {}) as Record<string, unknown>;
+		return {
+			transferCode: String(data.transfer_code ?? ''),
+			status: String(data.status ?? ''),
+			raw: body
+		};
+	}
+
+	async verifyTransfer(reference: string): Promise<TransferVerifyResult> {
+		const body = await this.request(`/transfer/verify/${encodeURIComponent(reference)}`, {
+			method: 'GET'
+		});
+
+		const data = (body.data ?? {}) as Record<string, unknown>;
+		return {
+			status: String(data.status ?? ''),
+			reference: String(data.reference ?? reference),
+			amountCents: Number(data.amount ?? 0),
+			currency: String(data.currency ?? ''),
+			raw: body
+		};
+	}
 }
 
 /** What a test (or the dev mock-pay page) seeds for a reference. */
@@ -223,6 +379,10 @@ export interface SeededVerify {
  */
 export class MockPaystackClient implements PaystackClient {
 	private readonly registry = new Map<string, SeededVerify>();
+	/** References already transferred, so a second attempt behaves like Paystack's. */
+	private readonly transfers = new Map<string, string>();
+	private readonly transferFailures = new Map<string, { status: number; message: string }>();
+	private readonly transferVerifies = new Map<string, SeededVerify>();
 
 	constructor(
 		private readonly secretKey: string,
@@ -234,8 +394,31 @@ export class MockPaystackClient implements PaystackClient {
 		this.registry.set(reference, result);
 	}
 
+	/**
+	 * Make the next `initiateTransfer` for this reference fail, so Section 7's
+	 * rejection path is reachable without a network.
+	 */
+	seedTransferFailure(reference: string, failure: { status: number; message: string }): void {
+		this.transferFailures.set(reference, failure);
+	}
+
+	/**
+	 * Seed what `verifyTransfer` will report for a reference (Section 8, P8).
+	 *
+	 * The double-verification design only means anything if the verify can
+	 * DISAGREE with the webhook, so this is deliberately independent of what
+	 * `initiateTransfer` recorded — seed 'failed' against a transfer.success
+	 * delivery and the mismatch branch is exercised for real.
+	 */
+	seedTransferVerify(reference: string, result: SeededVerify): void {
+		this.transferVerifies.set(reference, result);
+	}
+
 	clearRegistry(): void {
 		this.registry.clear();
+		this.transfers.clear();
+		this.transferFailures.clear();
+		this.transferVerifies.clear();
 	}
 
 	async initializeTransaction(params: InitializeParams): Promise<InitializeResult> {
@@ -272,6 +455,94 @@ export class MockPaystackClient implements PaystackClient {
 
 	verifyWebhookSignature(rawBody: string, signatureHeader: string | null | undefined): boolean {
 		return verifySignature(this.secretKey, rawBody, signatureHeader);
+	}
+
+	/**
+	 * Deterministic recipient code, derived from the number so a re-registration
+	 * of the SAME phone is recognisably the same code while a different phone
+	 * yields a different one — which is what the replacement spec needs to assert.
+	 */
+	async createTransferRecipient(params: TransferRecipientParams): Promise<TransferRecipientResult> {
+		const recipientCode = `RCP_mock_${params.accountNumber}`;
+		return {
+			recipientCode,
+			raw: {
+				status: true,
+				message: 'Transfer recipient created successfully',
+				data: {
+					recipient_code: recipientCode,
+					type: 'mobile_money',
+					currency: PAYSTACK_CURRENCY,
+					mock: true
+				}
+			}
+		};
+	}
+
+	/**
+	 * Transfers, with Paystack's own idempotency behaviour rather than a stub:
+	 * a reference that has already been transferred is REFUSED, exactly as the
+	 * real API refuses it. That makes P7's duplicate-reference branch reachable
+	 * by simply calling twice, instead of by seeding a fake error.
+	 */
+	async initiateTransfer(params: TransferParams): Promise<TransferResult> {
+		const seeded = this.transferFailures.get(params.reference);
+		if (seeded) {
+			// One-shot: a retry after a seeded failure should be able to succeed, so
+			// the failure does not wedge the reference forever.
+			this.transferFailures.delete(params.reference);
+			throw new PaystackApiError(seeded.status, seeded.message, '/transfer');
+		}
+
+		if (this.transfers.has(params.reference)) {
+			throw new PaystackApiError(400, 'Transfer reference is duplicate', '/transfer');
+		}
+
+		assertIntegerCents(params.amountKesCents);
+
+		const transferCode = `TRF_mock_${params.reference}`;
+		this.transfers.set(params.reference, transferCode);
+
+		return {
+			transferCode,
+			// Initiation only. Terminal state arrives by webhook + verify (Section 8),
+			// never from this call — the mock must not shortcut that.
+			status: 'pending',
+			raw: {
+				status: true,
+				message: 'Transfer has been queued',
+				data: {
+					transfer_code: transferCode,
+					reference: params.reference,
+					amount: params.amountKesCents,
+					currency: PAYSTACK_CURRENCY,
+					status: 'pending',
+					mock: true
+				}
+			}
+		};
+	}
+
+	async verifyTransfer(reference: string): Promise<TransferVerifyResult> {
+		const seeded = this.transferVerifies.get(reference);
+		// Unseeded references read as still-pending, mirroring verifyTransaction.
+		// That is the SAFE default here: 'pending' agrees with no terminal webhook
+		// claim, so an un-seeded test can never accidentally transition a payout.
+		const status = seeded?.status ?? 'pending';
+		const amountCents = seeded?.amountCents ?? 0;
+		const currency = seeded?.currency ?? PAYSTACK_CURRENCY;
+
+		return {
+			status,
+			reference,
+			amountCents,
+			currency,
+			raw: {
+				status: true,
+				message: 'Transfer retrieved',
+				data: { status, reference, amount: amountCents, currency, mock: true }
+			}
+		};
 	}
 
 	/**
