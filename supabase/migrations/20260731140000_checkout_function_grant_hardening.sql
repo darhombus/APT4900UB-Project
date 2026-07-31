@@ -1,0 +1,66 @@
+-- ============================================================================
+-- CHECKOUT FUNCTION GRANT HARDENING — close the local/hosted EXECUTE drift on
+-- the buyer-bound checkout functions
+--
+-- This is the FUNCTION-level counterpart of 20260730140000_checkout_grants_
+-- hardening.sql, which fixed the same class of problem for TABLES.
+--
+-- (a) WHAT WENT WRONG
+-- The hosted project carries `alter default privileges in schema public grant
+-- all on functions to ... service_role`, so every function is born with
+-- EXECUTE for service_role. 20260727170000_checkout_schema.sql enumerated its
+-- revokes explicitly:
+--
+--     revoke execute on function public.complete_order(uuid)
+--       from public, anon, authenticated;
+--
+-- That list names public, anon and authenticated but NOT service_role. On the
+-- LOCAL stack that is harmless — local default privileges hand out nothing, so
+-- service_role never had EXECUTE to begin with. On HOSTED it left the
+-- default-granted EXECUTE in place. Verified before this migration:
+--
+--   function                    | local                  | hosted
+--   ----------------------------+------------------------+-------------------------
+--   create_pending_order        | authenticated          | service_role + authenticated
+--   cancel_pending_order        | authenticated          | service_role + authenticated
+--   complete_order              | authenticated          | service_role + authenticated
+--
+-- The three background functions (finalize_order_payment, expire_pending_order,
+-- set_order_authorization_url) are INTENTIONALLY service_role-only and match on
+-- both stacks. They are deliberately left untouched here.
+--
+-- (b) CORRECTION TO THE RECORD
+-- 20260731120000_auto_complete_order.sql states, in its header comment, that
+-- "service_role holds NO EXECUTE on complete_order at all, so background code
+-- cannot call it even before the auth.uid() check would fail." That was true
+-- locally and FALSE on hosted until this migration. The applied migration is
+-- not edited — this comment is the correction, which is the same convention
+-- 20260727170000 used when correcting the initial schema.
+--
+-- The REASONING that justified Section 4A is unaffected: background code still
+-- could not complete an order on hosted, because the auth.uid() guard rejected
+-- it. Only the stated mechanism was wrong — a second lock, not the only one.
+--
+-- (c) NEVER EXPLOITABLE
+-- All three functions raise 42501 'not_authenticated' when auth.uid() is null,
+-- and filter their UPDATE by `buyer_id = auth.uid()`. A service-role caller has
+-- no JWT, so auth.uid() is null and the call always raised. The extra EXECUTE
+-- was inert. This migration removes it so the PRIVILEGE says what the code
+-- already enforced, restoring defence in depth rather than fixing a breach.
+--
+-- Idempotent and safe to re-run: REVOKE on a privilege that was never granted
+-- is a no-op, which is exactly what this is on the local stack.
+-- ============================================================================
+
+-- Buyer-bound: called only from a form action carrying the buyer's session.
+-- `authenticated` keeps EXECUTE; service_role loses the grant it should never
+-- have received.
+revoke execute on function public.create_pending_order(uuid, text) from service_role;
+revoke execute on function public.cancel_pending_order(uuid)       from service_role;
+revoke execute on function public.complete_order(uuid)             from service_role;
+
+-- NOT revoked, deliberately — these are the background functions, and
+-- service_role EXECUTE is their intended access path:
+--   finalize_order_payment(text, bigint)    — Inngest + the checkout callback
+--   expire_pending_order(uuid)              — the expire-order Inngest function
+--   set_order_authorization_url(uuid, text) — the checkout server action
