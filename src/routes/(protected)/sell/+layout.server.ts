@@ -18,8 +18,10 @@ export const load: LayoutServerLoad = async ({ locals, url, route }) => {
 	const onboarding = route.id === '/(protected)/sell/onboarding';
 
 	if (role === 'seller' || role === 'admin') {
-		// Already a seller — no need to see the onboarding form.
-		if (onboarding) redirect(303, '/sell');
+		// Already a seller — no need to see the onboarding form. Straight to
+		// /sell/listings, not /sell: /sell only redirects here anyway, and the
+		// extra hop is a second serverless invocation for nothing.
+		if (onboarding) redirect(303, '/sell/listings');
 		return { role };
 	}
 
