@@ -14,7 +14,17 @@ import type { Json } from '$lib/types/database';
 
 /** The `processing_outcome` vocabulary this handler can write (see the migration). */
 export type WebhookOutcome =
-	'received' | 'ignored_invalid' | 'ignored_unhandled' | 'ignored_unmatched';
+	| 'received'
+	| 'ignored_invalid'
+	| 'ignored_unhandled'
+	| 'ignored_unmatched'
+	// Payouts Section 8 — transfer events. Distinct values so the audit trail
+	// tells a verified transition apart from one refused by the verify or by the
+	// transition graph.
+	| 'transfer_applied'
+	| 'transfer_verify_mismatch'
+	| 'transfer_out_of_order'
+	| 'transfer_unmatched';
 
 export interface WebhookAuditRow {
 	paystack_reference: string | null;
@@ -25,12 +35,31 @@ export interface WebhookAuditRow {
 	processing_outcome: WebhookOutcome;
 }
 
+/**
+ * Payout-side dependencies (Payouts PRD — Section 8).
+ *
+ * Separate from the charge deps and OPTIONAL on purpose: when they are absent a
+ * transfer event falls through to the pre-existing `ignored_unhandled` path,
+ * which is exactly what this handler did before this phase. Every charge test
+ * therefore keeps passing unchanged, and the charge path is untouched whether or
+ * not payouts are wired.
+ */
+export interface TransferWebhookDeps {
+	/** P8's direct verify. Must agree with the webhook before any terminal transition. */
+	verifyTransfer(reference: string): Promise<{ status: string } | null>;
+	findPayoutByReference(reference: string): Promise<{ id: string; status: string } | null>;
+	/** Calls transition_payout_status; THROWS when the transition graph refuses. */
+	transitionPayout(payoutId: string, newStatus: string): Promise<void>;
+}
+
 export interface WebhookDeps {
 	paystack: Pick<PaystackClient, 'verifyWebhookSignature'>;
 	/** Appends one row to the payments audit trail. Service-role only (D9). */
 	recordAudit(row: WebhookAuditRow): Promise<void>;
 	/** Hands the reference to the Inngest function that does the real work. */
 	sendPaymentEvent(input: { reference: string; eventType: string }): Promise<void>;
+	/** Payouts Section 8. Absent → transfer events behave exactly as before. */
+	payouts?: TransferWebhookDeps;
 }
 
 export interface WebhookResult {
@@ -95,6 +124,14 @@ export async function handlePaystackWebhook(
 		return { status: 200, outcome: 'ignored_invalid', dispatched: false };
 	}
 
+	// Payouts Section 8 — transfer events branch off HERE, before the charge
+	// logic below, which is left exactly as it was. When `deps.payouts` is absent
+	// this test is false and a transfer falls through to `ignored_unhandled`,
+	// which is what happened before this phase existed.
+	if (deps.payouts && TRANSFER_EVENTS.has(eventType)) {
+		return handleTransferEvent(eventType, reference, payload, deps, deps.payouts);
+	}
+
 	// Signature is good. Decide the single outcome BEFORE writing, so every
 	// delivery leaves exactly one row.
 	let outcome: WebhookOutcome;
@@ -131,4 +168,102 @@ export async function handlePaystackWebhook(
 	await deps.sendPaymentEvent({ reference, eventType });
 
 	return { status: 200, outcome, dispatched: true };
+}
+
+/**
+ * Transfer webhooks (Payouts PRD — Section 8; P8, P9).
+ *
+ * Each event names the transition it claims and the status the direct verify
+ * must report for that claim to be believed. The webhook is a NOTIFICATION, not
+ * an authority: nothing terminal happens until Paystack, asked directly,
+ * confirms the same thing.
+ */
+const TRANSFER_EVENTS = new Map<string, { verified: string; from: string; to: string }>([
+	['transfer.success', { verified: 'success', from: 'processing', to: 'success' }],
+	['transfer.failed', { verified: 'failed', from: 'processing', to: 'failed' }],
+	['transfer.reversed', { verified: 'reversed', from: 'success', to: 'reversed' }]
+]);
+
+/**
+ * Handle one transfer event to a single outcome, always returning 200.
+ *
+ * 200 throughout is deliberate, as it is for the charge path: Paystack retries
+ * non-2xx, and none of the outcomes here become correct by being retried. An
+ * unknown reference stays unknown; a verify that disagrees will keep
+ * disagreeing; a duplicate delivery is already applied.
+ */
+async function handleTransferEvent(
+	eventType: string,
+	reference: string | null,
+	payload: Json,
+	deps: WebhookDeps,
+	payouts: TransferWebhookDeps
+): Promise<WebhookResult> {
+	const rule = TRANSFER_EVENTS.get(eventType)!;
+
+	const finish = async (outcome: WebhookOutcome): Promise<WebhookResult> => {
+		await deps.recordAudit({
+			paystack_reference: reference,
+			event_type: eventType,
+			signature_valid: true,
+			payload,
+			processing_outcome: outcome
+		});
+		return { status: 200, outcome, dispatched: false };
+	};
+
+	// (a) No reference, or one we never issued. Log and 200 — erroring at Paystack
+	// would earn us retries of a delivery we can never act on.
+	if (!reference) {
+		console.warn('[payouts] %s delivered with no reference', eventType);
+		return finish('transfer_unmatched');
+	}
+
+	const payout = await payouts.findPayoutByReference(reference);
+	if (!payout) {
+		console.warn('[payouts] %s for unknown reference %s', eventType, reference);
+		return finish('transfer_unmatched');
+	}
+
+	// (b) P8's double verification. The webhook says what happened; this asks
+	// Paystack directly and requires the same answer. A forged or replayed body
+	// that survived signature checking still cannot move money's status.
+	const verified = await payouts.verifyTransfer(reference);
+
+	if (!verified || verified.status !== rule.verified) {
+		// LOUD: a mismatch is either a Paystack-side surprise or someone replaying
+		// a stale body, and in both cases we deliberately do nothing.
+		console.error(
+			'[payouts] VERIFY MISMATCH for payout %s: webhook claimed %s (expects %s), Paystack reports %s. No action taken.',
+			payout.id,
+			eventType,
+			rule.verified,
+			verified?.status ?? 'unavailable'
+		);
+		return finish('transfer_verify_mismatch');
+	}
+
+	// (c)(d)(e) Verified. The transition graph decides whether this is legal from
+	// the row's CURRENT status — which is what makes duplicate and out-of-order
+	// deliveries safe without a separate seen-events table.
+	try {
+		await payouts.transitionPayout(payout.id, rule.to);
+	} catch (err) {
+		// (f) The graph refused: a duplicate transfer.success, a reversal for a
+		// payout that never succeeded, an event arriving before its predecessor.
+		// All are normal in a webhook world; none is an error to report upstream.
+		console.info(
+			'[payouts] %s for payout %s not applied (status was %s, wanted %s -> %s): %s',
+			eventType,
+			payout.id,
+			payout.status,
+			rule.from,
+			rule.to,
+			err instanceof Error ? err.message : String(err)
+		);
+		return finish('transfer_out_of_order');
+	}
+
+	console.info('[payouts] payout %s -> %s via %s (verified)', payout.id, rule.to, eventType);
+	return finish('transfer_applied');
 }
