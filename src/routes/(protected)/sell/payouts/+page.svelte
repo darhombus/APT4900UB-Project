@@ -1,14 +1,35 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { applyAction, enhance } from '$app/forms';
 	import { Alert, Badge, Button, Card, Input, Label, Price } from '$lib/components/ui';
 	import { centsToMajor } from '$lib/orders';
 	import { payoutOriginLabel, payoutStatusLabel, payoutStatusVariant } from '$lib/payouts';
+	import { toast } from '$lib/toast.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	const saved = $derived(page.url.searchParams.get('saved') === '1');
-	const requested = $derived(page.url.searchParams.get('requested') === '1');
+	/**
+	 * Outcomes are toasts; field-level errors stay inline as an Alert, per the
+	 * convention in $lib/toast.svelte.
+	 *
+	 * Both actions REDIRECT on success (post-redirect-get, so a refresh cannot
+	 * re-submit), which is why this uses applyAction rather than update — update
+	 * does not follow a redirect result. Progressive enhancement is intact: with
+	 * JS off the form is a plain POST, the server still redirects, and the page
+	 * shows the new state. Only the toast is lost, and the state itself is the
+	 * confirmation.
+	 */
+	function toastOnSuccess(message: string): SubmitFunction {
+		return () =>
+			async ({ result }) => {
+				if (result.type === 'redirect') toast.success(message);
+				await applyAction(result);
+			};
+	}
+
+	const onSaveRecipient = toastOnSuccess('Payout number saved.');
+	const onWithdraw = toastOnSuccess('Withdrawal started.');
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
 		day: 'numeric',
@@ -33,14 +54,6 @@
 	<h1 class="font-display text-2xl font-bold text-ink">Payouts</h1>
 	<p class="mt-1 text-sm text-muted">Your earnings and where they're sent.</p>
 
-	{#if saved && !form?.formError}
-		<Alert variant="success" class="mt-6">Payout number saved.</Alert>
-	{/if}
-	{#if requested && !form?.withdrawError}
-		<Alert variant="success" class="mt-6">
-			Withdrawal started. It usually arrives within a few minutes.
-		</Alert>
-	{/if}
 	{#if form?.formError}
 		<Alert variant="error" class="mt-6">{form.formError}</Alert>
 	{/if}
@@ -80,7 +93,12 @@
 			</div>
 		{/if}
 
-		<form method="POST" action="?/withdrawNow" class="mt-5 border-t border-border pt-5">
+		<form
+			method="POST"
+			action="?/withdrawNow"
+			use:enhance={onWithdraw}
+			class="mt-5 border-t border-border pt-5"
+		>
 			{#if canWithdraw}
 				<!-- Fee and net rendered server-side, so the cost is visible before
 				     submitting rather than after (Section 6 task 2). -->
@@ -143,7 +161,12 @@
 			</p>
 		{/if}
 
-		<form method="POST" action="?/saveRecipient" class="mt-5 border-t border-border pt-5">
+		<form
+			method="POST"
+			action="?/saveRecipient"
+			use:enhance={onSaveRecipient}
+			class="mt-5 border-t border-border pt-5"
+		>
 			<Label for="phone">{data.recipient ? 'Change number' : 'Mpesa number'}</Label>
 			<div class="mt-1.5 flex flex-col gap-3 sm:flex-row">
 				<div class="flex-1">
