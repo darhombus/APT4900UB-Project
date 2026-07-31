@@ -208,10 +208,10 @@ export const actions: Actions = {
 			});
 		}
 
-		// POST-redirect-get so a refresh cannot re-submit. No query flag: success is
-		// a toast on the JS path, and on the no-JS path the rendered masked number
-		// is the confirmation.
-		redirect(303, '/sell/payouts');
+		// POST-redirect-get so a refresh cannot re-submit. The flag is what the
+		// NO-JS path renders its success banner from; the enhanced path strips it
+		// before navigating and shows a toast instead.
+		redirect(303, '/sell/payouts?saved=1');
 	},
 
 	/**
@@ -294,6 +294,7 @@ export const actions: Actions = {
 			);
 		}
 
-		redirect(303, '/sell/payouts');
+		// See saveRecipient: the flag serves the no-JS banner only.
+		redirect(303, '/sell/payouts?requested=1');
 	}
 };
