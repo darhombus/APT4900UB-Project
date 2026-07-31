@@ -51,6 +51,34 @@ export const orderCreated = eventType('checkout/order.created', {
 	schema: staticSchema<{ orderId: string }>()
 });
 
+/**
+ * An order was finalised as paid; starts the 7-day auto-completion countdown
+ * (Payouts PRD — Section 4A, ruling PR-7).
+ *
+ * Emitted from `processPaymentReference` on the `finalized` outcome, which is
+ * the one chokepoint BOTH the webhook/Inngest path and the checkout callback
+ * page pass through. Emitting from `process-payment-event` instead would
+ * silently miss every callback-finalised order.
+ *
+ * MAY fire more than once for one order: the webhook and the callback can both
+ * process the same reference. Consumers must be idempotent.
+ */
+export const orderPaid = eventType('checkout/order.paid', {
+	schema: staticSchema<{ orderId: string }>()
+});
+
+/**
+ * A seller asked for a payout, or the weekly sweep created one (Payouts PRD —
+ * Sections 6, 7 and 9). Carries the payout id only; the transfer function reads
+ * the row itself rather than trusting anything in the event.
+ *
+ * Safe to receive more than once: `payout-initiate-transfer` exits cleanly when
+ * the row is no longer 'pending'.
+ */
+export const payoutRequested = eventType('payout/requested', {
+	schema: staticSchema<{ payoutId: string }>()
+});
+
 export const inngest = new Inngest({
 	id: 'mysoko',
 	/**

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '$lib/types/database';
 import { PaystackApiError, type PaystackClient, type VerifyResult } from '$lib/server/paystack';
 import { decidePayment, type PaymentDecision } from '$lib/server/payment-decision';
+import { inngest, orderPaid } from '$lib/server/inngest';
 
 /**
  * The verify-and-finalize path (Checkout PRD — Section 6), as ONE implementation.
@@ -39,6 +40,17 @@ export interface ProcessDeps {
 	paystack: Pick<PaystackClient, 'verifyTransaction'>;
 	/** MUST be the service-role client (R-10). */
 	admin: SupabaseClient<Database>;
+	/**
+	 * Emits `checkout/order.paid` (Payouts PRD — Section 4A, ruling PR-7).
+	 * Optional: defaults to the real Inngest client, so neither existing caller
+	 * has to change and neither can forget to wire it. Injectable for tests.
+	 */
+	sendOrderPaid?: (input: { orderId: string }) => Promise<void>;
+}
+
+/** The default emitter — the real Inngest client. */
+async function emitOrderPaid(input: { orderId: string }): Promise<void> {
+	await inngest.send(orderPaid.create(input));
 }
 
 /**
@@ -171,6 +183,27 @@ export async function processPaymentReference(
 		payload: (finalized as Json) ?? null,
 		processing_outcome: 'finalized'
 	});
+
+	// PR-7 — start the 7-day auto-completion countdown (Section 4A). Emitted here
+	// rather than in the Inngest function because THIS is the shared chokepoint:
+	// the callback page finalises orders without any Inngest event of its own.
+	//
+	// Best-effort on purpose. Throwing would not help: on a retry `decidePayment`
+	// sees the order already 'paid' and returns noop_already_paid, so this branch
+	// is never re-entered and the event cannot be re-sent anyway. Throwing would
+	// only add a failed run and, on the callback path, a 500 for a buyer whose
+	// payment actually succeeded. The order IS paid either way; a lost event costs
+	// the auto-completion backstop, not the payment.
+	try {
+		await (deps.sendOrderPaid ?? emitOrderPaid)({ orderId: order!.id });
+	} catch (err) {
+		console.error(
+			'[payment] order %s finalised but checkout/order.paid failed to send: %s. ' +
+				'Auto-completion will not be scheduled for this order.',
+			order!.id,
+			err instanceof Error ? err.message : String(err)
+		);
+	}
 
 	return { outcome: 'finalized', orderId: order!.id, verifyStatus: verify?.status };
 }
