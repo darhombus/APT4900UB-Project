@@ -183,7 +183,15 @@
 				<div class="py-1">
 					<p class={sectionLabel}>Explore</p>
 					<a href="/search" class={navItem} onclick={onclose}>Browse all listings</a>
-					<a href="/sell" class={navItem} onclick={onclose}>Sell on MySoko</a>
+					<!-- Link straight to the destination rather than via /sell, which only
+					     redirects. Every hop is a separate serverless invocation, so on a
+					     cold tier the round-trip is the latency, not the work. Logged-out
+					     keeps /sell, which routes through the login guard as before. -->
+					<a
+						href={!loggedIn ? '/sell' : isSeller ? '/sell/listings' : '/sell/onboarding'}
+						class={navItem}
+						onclick={onclose}>Sell on MySoko</a
+					>
 				</div>
 
 				<!-- Account -->
