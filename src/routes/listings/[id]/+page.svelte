@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { Alert, Badge, Button, Price } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { conditionLabel } from '$lib/validation/listings';
@@ -64,6 +65,37 @@
 			buying = false;
 		};
 	};
+
+	/**
+	 * Recover the page whenever it becomes visible again with a handoff still
+	 * "in flight".
+	 *
+	 * `onBuy` deliberately leaves `buying` true when it hands off to Paystack, so
+	 * the spinner survives right up to the navigation. Coming back has to undo
+	 * that — and the route back varies in ways we cannot detect from here. A
+	 * cache-control: no-store response already stops the plain HTTP-cache replay,
+	 * but Chrome still admits no-store pages to the BFCACHE, and whether a given
+	 * return is a fresh load, a cache replay or a bfcache restore depends on how
+	 * long the buyer sat on Paystack's page and on memory pressure.
+	 *
+	 * So key off the one signal every route back shares: the document becoming
+	 * visible. `visibilitychange` fires on bfcache restore, on tab refocus and on
+	 * a restored history entry, where `pageshow` demonstrably does NOT — an
+	 * earlier attempt hooked pageshow and it never ran at all.
+	 *
+	 * Guarded on `buying` so this costs nothing on an ordinary tab switch: it
+	 * only acts when we actually handed off and came back. invalidateAll refetches
+	 * the hold, so the buyer gets Cancel rather than a dead Buy Now.
+	 */
+	$effect(() => {
+		const onVisible = () => {
+			if (document.visibilityState !== 'visible' || !buying) return;
+			buying = false;
+			void invalidateAll();
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => document.removeEventListener('visibilitychange', onVisible);
+	});
 
 	let cancelling = $state(false);
 	const onCancel: SubmitFunction = () => {
