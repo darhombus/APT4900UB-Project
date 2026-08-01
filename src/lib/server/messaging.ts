@@ -58,12 +58,32 @@ export async function listConversations(
 		.limit(1, { referencedTable: 'messages' });
 	if (!convs || convs.length === 0) return [];
 
+	// Hide conversations nobody has spoken in.
+	//
+	// `startConversation` has to create the row eagerly — the route is
+	// /messages/<id>, so an id must exist before the thread can be opened. A buyer
+	// who clicks "Message seller", reads the page and leaves without typing
+	// therefore leaves a real but empty conversation, which showed up in BOTH
+	// inboxes: the buyer sees a thread they never wrote in, and worse, the seller
+	// gets one from someone who never said anything.
+	//
+	// Filtering here rather than deferring creation: routing needs the id, so
+	// deferring would mean restructuring the thread route for no visible gain.
+	// Nothing is deleted, and nothing is stranded — startConversation is
+	// idempotent on the (listing_id, buyer_id) unique constraint, so clicking
+	// "Message seller" again reopens this same row rather than making another.
+	//
+	// The embed is already limited to the newest message per conversation, so an
+	// empty `messages` array is exactly "no messages" and costs no extra query.
+	const spoken = convs.filter((c) => c.messages.length > 0);
+	if (spoken.length === 0) return [];
+
 	const [parties, listings] = await Promise.all([
-		fetchParties(supabase, convs),
-		fetchListingMeta(convs.map((c) => c.listing_id))
+		fetchParties(supabase, spoken),
+		fetchListingMeta(spoken.map((c) => c.listing_id))
 	]);
 
-	return convs.map((c) => ({
+	return spoken.map((c) => ({
 		...buildSummary(c, userId, parties, listings),
 		lastMessagePreview: c.messages[0]?.body ?? null
 	}));

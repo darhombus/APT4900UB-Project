@@ -194,7 +194,7 @@
 		<!-- Gallery -->
 		<div>
 			<div
-				class="relative aspect-[4/3] overflow-hidden rounded-card border border-border bg-neutral-tint"
+				class="relative aspect-4/3 overflow-hidden rounded-card border border-border bg-neutral-tint"
 			>
 				<img src={mainUrl} alt={listing.title} class="h-full w-full object-contain" />
 				{#if isSold}
