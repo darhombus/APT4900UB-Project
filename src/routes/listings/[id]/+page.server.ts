@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { loadCategoryTree } from '$lib/server/categories';
 import { publicUrl } from '$lib/listing-images';
 import { findSubcategory } from '$lib/validation/listings';
-import { findConversation, startConversation } from '$lib/server/messaging';
+import { findSpokenConversation, startConversation } from '$lib/server/messaging';
 import {
 	cancelCheckout,
 	findPendingHold,
@@ -62,7 +62,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals: { supab
 	// exist? Drives the "Message seller" vs "View conversation" button label.
 	const existingConversationId =
 		user && !isOwner && listing.status === 'active'
-			? await findConversation(supabase, listing.id, user.id)
+			? await findSpokenConversation(supabase, listing.id, user.id)
 			: null;
 
 	// D3 — is a checkout already in progress on this listing? Only meaningful
