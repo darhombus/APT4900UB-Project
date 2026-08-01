@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { cancelCheckout } from '$lib/server/checkout';
-import { findConversation } from '$lib/server/messaging';
+import { findSpokenConversation } from '$lib/server/messaging';
 import { coverPath, publicUrl } from '$lib/listing-images';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, user } 
 	// (messaging D3). So: link to the thread if one exists; otherwise offer to
 	// start one only while the listing is still active; otherwise hide the link
 	// rather than presenting a dead end.
-	const conversationId = await findConversation(supabase, order.listing_id, user!.id);
+	const conversationId = await findSpokenConversation(supabase, order.listing_id, user!.id);
 	const messageHref = conversationId
 		? `/messages/${conversationId}`
 		: listing?.status === 'active'
