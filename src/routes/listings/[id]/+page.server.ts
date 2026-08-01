@@ -11,7 +11,7 @@ import {
 } from '$lib/server/checkout';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, user } }) => {
+export const load: PageServerLoad = async ({ params, setHeaders, locals: { supabase, user } }) => {
 	// RLS returns active/sold to anyone, drafts/removed only to their owner (or
 	// admin), and NEVER a `deleted` listing (hidden from everyone incl. the owner —
 	// so it 404s here). A missing row is a bad id, a stranger's draft, or a deletion.
@@ -72,6 +72,29 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, user } 
 		listing.status === 'active'
 			? toCheckoutHold(await findPendingHold(listing.id), user?.id)
 			: null;
+
+	// Never let a signed-in buyer's view of a buyable listing be replayed from the
+	// browser cache.
+	//
+	// The Buy Now area is transactional: it renders "Buy now", "Resume payment /
+	// Cancel checkout", or a disabled button, depending on a hold that can appear
+	// or vanish at any moment. Handing off to Paystack and pressing back re-showed
+	// the CACHED page — captured before the order existed — so the buyer saw a
+	// dead, still-spinning "Buy now" and no way to cancel the order they had just
+	// abandoned. Only a hard reload recovered it.
+	//
+	// A pageshow/bfcache listener was tried first and does not work: this
+	// navigation never fires pageshow, so nothing client-side gets a chance to
+	// react. Refusing to store the response is the only reliable fix, and it also
+	// clears the stale spinner for free, because the page is rebuilt rather than
+	// restored.
+	//
+	// Scoped deliberately: only for a signed-in non-owner on an ACTIVE listing —
+	// exactly the people who can start a checkout. Anonymous and sold/draft views
+	// stay cacheable.
+	if (user && !isOwner && listing.status === 'active') {
+		setHeaders({ 'cache-control': 'no-store' });
+	}
 
 	return {
 		listing,

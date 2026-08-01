@@ -54,11 +54,18 @@
 
 <!--
 	Rendered once from the root layout. A polite live region announces success/info
-	on insertion; individual error toasts escalate to role="alert". Bottom-anchored
-	so it never covers the sticky top bar; newest sits on top via a reversed stack.
+	on insertion; individual error toasts escalate to role="alert". Newest sits
+	closest to the screen edge via the reversed stack.
+
+	Top-anchored, BELOW the sticky header rather than over it. The offset is not
+	cosmetic: the container is pointer-events-none but each toast is
+	pointer-events-auto, so a toast sitting on the header would swallow clicks on
+	the account menu and the wordmark underneath it for as long as it was visible.
+	Two offsets because the header is two rows under `md` (the search row is
+	md:hidden) and one row above it.
 -->
 <div
-	class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col-reverse items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end sm:p-6"
+	class="pointer-events-none fixed inset-x-0 top-28 z-50 flex flex-col-reverse items-center gap-2 px-4 sm:inset-x-auto sm:right-0 sm:items-end sm:px-6 md:top-18"
 	aria-live="polite"
 	aria-relevant="additions"
 >

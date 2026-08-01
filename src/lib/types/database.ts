@@ -390,48 +390,79 @@ export type Database = {
           },
         ]
       }
-      payouts: {
+      payout_recipients: {
         Row: {
-          amount: number
           created_at: string
-          currency: string
           id: string
-          order_id: string | null
-          provider_ref: string | null
+          paystack_recipient_code: string
+          phone_masked: string
           seller_id: string
-          status: Database["public"]["Enums"]["payout_status"]
-          updated_at: string
         }
         Insert: {
-          amount: number
           created_at?: string
-          currency?: string
           id?: string
-          order_id?: string | null
-          provider_ref?: string | null
+          paystack_recipient_code: string
+          phone_masked: string
           seller_id: string
-          status?: Database["public"]["Enums"]["payout_status"]
-          updated_at?: string
         }
         Update: {
-          amount?: number
           created_at?: string
-          currency?: string
           id?: string
-          order_id?: string | null
-          provider_ref?: string | null
+          paystack_recipient_code?: string
+          phone_masked?: string
           seller_id?: string
-          status?: Database["public"]["Enums"]["payout_status"]
-          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "payouts_order_id_fkey"
-            columns: ["order_id"]
+            foreignKeyName: "payout_recipients_seller_id_fkey"
+            columns: ["seller_id"]
             isOneToOne: false
-            referencedRelation: "orders"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      payouts: {
+        Row: {
+          amount_kes_cents: number
+          created_at: string
+          fee_kes_cents: number
+          id: string
+          origin: string
+          paystack_transfer_reference: string
+          recipient_code: string
+          seller_id: string
+          status: string
+          transfer_amount_kes_cents: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount_kes_cents: number
+          created_at?: string
+          fee_kes_cents?: number
+          id?: string
+          origin: string
+          paystack_transfer_reference: string
+          recipient_code: string
+          seller_id: string
+          status?: string
+          transfer_amount_kes_cents?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount_kes_cents?: number
+          created_at?: string
+          fee_kes_cents?: number
+          id?: string
+          origin?: string
+          paystack_transfer_reference?: string
+          recipient_code?: string
+          seller_id?: string
+          status?: string
+          transfer_amount_kes_cents?: number | null
+          updated_at?: string
+        }
+        Relationships: [
           {
             foreignKeyName: "payouts_seller_id_fkey"
             columns: ["seller_id"]
@@ -541,6 +572,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_complete_order: { Args: { p_order_id: string }; Returns: boolean }
       become_seller: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
@@ -660,6 +692,14 @@ export type Database = {
         Returns: boolean
       }
       is_seller_or_admin: { Args: never; Returns: boolean }
+      payout_sweep_candidates: {
+        Args: { p_min_kes_cents: number }
+        Returns: {
+          amount_kes_cents: number
+          recipient_code: string
+          seller_id: string
+        }[]
+      }
       search_listings: {
         Args: {
           category_ids?: string[]
@@ -696,6 +736,11 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      seller_available_balance: {
+        Args: { p_seller_id: string }
+        Returns: number
+      }
+      seller_pending_balance: { Args: { p_seller_id: string }; Returns: number }
       set_order_authorization_url: {
         Args: { p_order_id: string; p_url: string }
         Returns: boolean
@@ -703,6 +748,28 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_listing: { Args: { p_id: string }; Returns: boolean }
+      transition_payout_status: {
+        Args: { p_new_status: string; p_payout_id: string }
+        Returns: {
+          amount_kes_cents: number
+          created_at: string
+          fee_kes_cents: number
+          id: string
+          origin: string
+          paystack_transfer_reference: string
+          recipient_code: string
+          seller_id: string
+          status: string
+          transfer_amount_kes_cents: number | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payouts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       item_condition: "new" | "used_like_new" | "used_good" | "used_fair"
@@ -722,7 +789,6 @@ export type Database = {
         | "expired"
       payment_method: "mpesa" | "card"
       payment_status: "initiated" | "processing" | "succeeded" | "failed"
-      payout_status: "pending" | "processing" | "paid" | "failed"
       user_role: "buyer" | "seller" | "admin"
     }
     CompositeTypes: {
@@ -873,7 +939,6 @@ export const Constants = {
       ],
       payment_method: ["mpesa", "card"],
       payment_status: ["initiated", "processing", "succeeded", "failed"],
-      payout_status: ["pending", "processing", "paid", "failed"],
       user_role: ["buyer", "seller", "admin"],
     },
   },

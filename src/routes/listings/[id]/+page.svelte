@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { Alert, Badge, Button, Price } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { conditionLabel } from '$lib/validation/listings';
@@ -64,6 +65,51 @@
 			buying = false;
 		};
 	};
+
+	/**
+	 * Recover the page whenever it becomes visible again with a handoff still
+	 * "in flight".
+	 *
+	 * `onBuy` deliberately leaves `buying` true when it hands off to Paystack, so
+	 * the spinner survives right up to the navigation. Coming back has to undo
+	 * that — and the route back varies in ways we cannot detect from here. A
+	 * cache-control: no-store response already stops the plain HTTP-cache replay,
+	 * but Chrome still admits no-store pages to the BFCACHE, and whether a given
+	 * return is a fresh load, a cache replay or a bfcache restore depends on how
+	 * long the buyer sat on Paystack's page and on memory pressure.
+	 *
+	 * So key off the one signal every route back shares: the document becoming
+	 * visible. `visibilitychange` fires on bfcache restore, on tab refocus and on
+	 * a restored history entry, where `pageshow` demonstrably does NOT — an
+	 * earlier attempt hooked pageshow and it never ran at all.
+	 *
+	 * Guarded on `buying` so this costs nothing on an ordinary tab switch: it
+	 * only acts when we actually handed off and came back. invalidateAll refetches
+	 * the hold, so the buyer gets Cancel rather than a dead Buy Now.
+	 *
+	 * `revalidating` covers the gap in between. Without it the restored snapshot —
+	 * taken before the order existed — renders "Buy now" for a few hundred ms
+	 * before the fresh data swaps it for "Resume payment / Cancel checkout". That
+	 * flash is not merely ugly: the button is live during it, and clicking would
+	 * hit create_pending_order, which rejects because a pending order already
+	 * holds the listing.
+	 */
+	let revalidating = $state(false);
+
+	$effect(() => {
+		const onVisible = () => {
+			if (document.visibilityState !== 'visible' || !buying) return;
+			buying = false;
+			// Hold a neutral state until the refetch lands, so the stale snapshot
+			// never renders an actionable Buy Now for an item we already hold.
+			revalidating = true;
+			void invalidateAll().finally(() => {
+				revalidating = false;
+			});
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => document.removeEventListener('visibilitychange', onVisible);
+	});
 
 	let cancelling = $state(false);
 	const onCancel: SubmitFunction = () => {
@@ -148,7 +194,7 @@
 		<!-- Gallery -->
 		<div>
 			<div
-				class="relative aspect-[4/3] overflow-hidden rounded-card border border-border bg-neutral-tint"
+				class="relative aspect-4/3 overflow-hidden rounded-card border border-border bg-neutral-tint"
 			>
 				<img src={mainUrl} alt={listing.title} class="h-full w-full object-contain" />
 				{#if isSold}
@@ -196,7 +242,13 @@
 
 			{#if canBuy}
 				<div class="mt-5">
-					{#if hold?.heldByMe}
+					{#if revalidating}
+						<!-- Returning from Paystack: the restored page still holds the data
+						     from before the order existed, so rendering it would flash an
+						     actionable "Buy now" that create_pending_order would reject.
+						     Hold a neutral state for the few hundred ms the refetch takes. -->
+						<Button disabled loading class="w-full sm:w-auto">Checking your checkout</Button>
+					{:else if hold?.heldByMe}
 						<div class="flex flex-col gap-2 sm:flex-row">
 							{#if hold.authorizationUrl}
 								<Button href={hold.authorizationUrl} class="w-full sm:w-auto">Resume payment</Button

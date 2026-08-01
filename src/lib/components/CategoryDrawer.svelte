@@ -183,7 +183,15 @@
 				<div class="py-1">
 					<p class={sectionLabel}>Explore</p>
 					<a href="/search" class={navItem} onclick={onclose}>Browse all listings</a>
-					<a href="/sell" class={navItem} onclick={onclose}>Sell on MySoko</a>
+					<!-- Link straight to the destination rather than via /sell, which only
+					     redirects. Every hop is a separate serverless invocation, so on a
+					     cold tier the round-trip is the latency, not the work. Logged-out
+					     keeps /sell, which routes through the login guard as before. -->
+					<a
+						href={!loggedIn ? '/sell' : isSeller ? '/sell/listings' : '/sell/onboarding'}
+						class={navItem}
+						onclick={onclose}>Sell on MySoko</a
+					>
 				</div>
 
 				<!-- Account -->
@@ -221,11 +229,13 @@
 							{/if}
 						</a>
 						<a href="/account" class={navItem} onclick={onclose}>Account</a>
-						<a
-							href={isSeller ? '/sell/listings' : '/sell/onboarding'}
-							class={navItem}
-							onclick={onclose}>My listings</a
-						>
+						<!-- Sellers only. A buyer's single route into selling is the
+						     "Sell on MySoko" link above, which lands on onboarding via the
+						     /sell guard — offering "My listings" as well gave them two
+						     entries pointing at the same flow. -->
+						{#if isSeller}
+							<a href="/sell/listings" class={navItem} onclick={onclose}>My listings</a>
+						{/if}
 						<form method="POST" action="/logout" use:enhance onsubmit={onclose}>
 							<button type="submit" class={`${navItem} w-full text-left`}>Log out</button>
 						</form>

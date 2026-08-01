@@ -21,6 +21,25 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 			'id, status, amount_total, commission_amount, seller_net, created_at, paid_at, listing_id, buyer_id, listings(title, type, listing_images(storage_path, position)), profiles!orders_buyer_id_fkey(full_name)'
 		)
 		.eq('seller_id', user!.id)
+		// Sales only — orders that reached `paid` or beyond.
+		//
+		// A checkout that was cancelled or expired was never a sale, offers the
+		// seller nothing to act on (isTerminalOrderStatus already treats both as
+		// dead), and contributes nothing to the earnings figure above the list,
+		// which counts `completed` only. Left in, they would dominate: abandonment
+		// is the common outcome at checkout, and every abandoned attempt leaves a
+		// row — `cancelled` when the buyer backs out, `expired` when the Inngest
+		// job reaps the 30-minute hold. The real sales would end up scattered among
+		// them.
+		//
+		// `pending_payment` is excluded for the same reason: it is a hold in
+		// progress, not a sale, and it resolves within 30 minutes either way.
+		// `paid` IS included — the money is real and the seller is simply waiting
+		// on the buyer to confirm receipt.
+		//
+		// Nothing is deleted. The rows remain the audit trail, and abandonment is
+		// a question for a future analytics view rather than for this list.
+		.in('status', ['paid', 'completed'])
 		.order('created_at', { ascending: false });
 
 	const sales = (rows ?? []).map((o) => ({
