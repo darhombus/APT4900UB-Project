@@ -65,7 +65,7 @@
 	md:hidden) and one row above it.
 -->
 <div
-	class="pointer-events-none fixed inset-x-0 top-28 z-50 flex flex-col-reverse items-center gap-2 px-4 sm:inset-x-auto sm:right-0 sm:items-end sm:px-6 md:top-[4.5rem]"
+	class="pointer-events-none fixed inset-x-0 top-28 z-50 flex flex-col-reverse items-center gap-2 px-4 sm:inset-x-auto sm:right-0 sm:items-end sm:px-6 md:top-18"
 	aria-live="polite"
 	aria-relevant="additions"
 >
