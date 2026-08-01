@@ -232,6 +232,48 @@ export async function markRead(
 
 /** The id of the (listing, buyer) conversation if one exists, else null. Also used
  *  by the listing page to decide "Message seller" vs "View conversation". */
+/**
+ * Like findConversation, but only counts a thread somebody has actually spoken in.
+ *
+ * For UI LABELS, not for routing decisions. "View conversation" has to mean the
+ * same thing everywhere: a conversation row created by an abandoned "Message
+ * seller" click is hidden from the inbox (see listConversations), so offering
+ * "View conversation" for it sent the buyer to a thread that appears in no list
+ * — three surfaces disagreeing about whether the same conversation exists.
+ *
+ * findConversation itself deliberately still matches empty rows: startConversation
+ * relies on that for idempotency against the (listing_id, buyer_id) unique
+ * constraint, and must reuse the existing row rather than fail to find it and try
+ * to insert a duplicate.
+ *
+ * Costs no extra round trip over findConversation — the embed is limited to one
+ * message and only its presence is read.
+ */
+export async function findSpokenConversation(
+	supabase: DB,
+	listingId: string,
+	buyerId: string
+): Promise<string | null> {
+	const { data: conv } = await supabase
+		.from('conversations')
+		.select('id')
+		.eq('listing_id', listingId)
+		.eq('buyer_id', buyerId)
+		.maybeSingle();
+	if (!conv) return null;
+
+	// Deliberately a second query rather than an embed. Embedding messages into a
+	// maybeSingle() select returned no row at all here, which silently made every
+	// conversation look unspoken — the button would have stopped ever saying
+	// "View conversation". A head+count is unambiguous and cheap: it reads no rows.
+	const { count } = await supabase
+		.from('messages')
+		.select('id', { count: 'exact', head: true })
+		.eq('conversation_id', conv.id);
+
+	return count && count > 0 ? conv.id : null;
+}
+
 export async function findConversation(
 	supabase: DB,
 	listingId: string,
