@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Badge, Price } from '$lib/components/ui';
+	import { Badge, Price, Stars } from '$lib/components/ui';
 	import { conditionLabel } from '$lib/validation/listings';
 	import type { ListingCardData } from '$lib/listings-view';
 
@@ -70,6 +70,12 @@
 		<div class="space-y-1 p-3">
 			<Price amount={listing.price} class="block" />
 			<h3 class="line-clamp-2 text-sm font-medium text-ink">{listing.title}</h3>
+			<!-- Compact rating (Section 8.1). Omitted entirely when there are no
+			     reviews — an empty star row on every new listing would be noise, and
+			     a 0.0 would be a lie. -->
+			{#if listing.ratingAverage !== null}
+				<Stars average={listing.ratingAverage} count={listing.reviewCount} class="block" />
+			{/if}
 			<div class="flex items-center justify-between gap-2 text-xs text-subtle">
 				<span class="truncate">{listing.location_area ?? 'Nairobi'}</span>
 				<span class="flex-none">{listing.postedLabel}</span>
