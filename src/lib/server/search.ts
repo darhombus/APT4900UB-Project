@@ -81,6 +81,10 @@ export async function runSearch(
 			created_at: r.created_at,
 			type: r.type,
 			categoryLabel: categoryNames?.get(r.category_id) ?? null,
+			// search_listings is `returns setof public.listings`, so the review
+			// aggregates arrive with the row — no extra select, no per-card query.
+			review_count: r.review_count,
+			rating_sum: r.rating_sum,
 			listing_images: imagesByListing.get(r.id) ?? []
 		})
 	);

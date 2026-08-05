@@ -169,6 +169,8 @@ export type Database = {
           price: number
           published_at: string | null
           quantity: number
+          rating_sum: number
+          review_count: number
           search_vector: unknown
           seller_id: string
           status: Database["public"]["Enums"]["listing_status"]
@@ -188,6 +190,8 @@ export type Database = {
           price: number
           published_at?: string | null
           quantity?: number
+          rating_sum?: number
+          review_count?: number
           search_vector?: unknown
           seller_id: string
           status?: Database["public"]["Enums"]["listing_status"]
@@ -207,6 +211,8 @@ export type Database = {
           price?: number
           published_at?: string | null
           quantity?: number
+          rating_sum?: number
+          review_count?: number
           search_vector?: unknown
           seller_id?: string
           status?: Database["public"]["Enums"]["listing_status"]
@@ -480,6 +486,8 @@ export type Database = {
           id: string
           location: string | null
           phone: string | null
+          rating_sum: number
+          review_count: number
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
@@ -490,6 +498,8 @@ export type Database = {
           id: string
           location?: string | null
           phone?: string | null
+          rating_sum?: number
+          review_count?: number
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -500,6 +510,8 @@ export type Database = {
           id?: string
           location?: string | null
           phone?: string | null
+          rating_sum?: number
+          review_count?: number
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -507,36 +519,52 @@ export type Database = {
       }
       reviews: {
         Row: {
-          comment: string | null
+          body: string | null
+          buyer_id: string
           created_at: string
           id: string
           listing_id: string
           order_id: string
           rating: number
-          reviewer_id: string
           seller_id: string
+          seller_responded_at: string | null
+          seller_response: string | null
+          status: Database["public"]["Enums"]["review_status"]
         }
         Insert: {
-          comment?: string | null
+          body?: string | null
+          buyer_id: string
           created_at?: string
           id?: string
           listing_id: string
           order_id: string
           rating: number
-          reviewer_id: string
           seller_id: string
+          seller_responded_at?: string | null
+          seller_response?: string | null
+          status?: Database["public"]["Enums"]["review_status"]
         }
         Update: {
-          comment?: string | null
+          body?: string | null
+          buyer_id?: string
           created_at?: string
           id?: string
           listing_id?: string
           order_id?: string
           rating?: number
-          reviewer_id?: string
           seller_id?: string
+          seller_responded_at?: string | null
+          seller_response?: string | null
+          status?: Database["public"]["Enums"]["review_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "reviews_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reviews_listing_id_fkey"
             columns: ["listing_id"]
@@ -549,13 +577,6 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: true
             referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "reviews_reviewer_id_fkey"
-            columns: ["reviewer_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -722,6 +743,8 @@ export type Database = {
           price: number
           published_at: string | null
           quantity: number
+          rating_sum: number
+          review_count: number
           search_vector: unknown
           seller_id: string
           status: Database["public"]["Enums"]["listing_status"]
@@ -748,6 +771,28 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_listing: { Args: { p_id: string }; Returns: boolean }
+      submit_seller_response: {
+        Args: { response: string; review_id: string }
+        Returns: {
+          body: string | null
+          buyer_id: string
+          created_at: string
+          id: string
+          listing_id: string
+          order_id: string
+          rating: number
+          seller_id: string
+          seller_responded_at: string | null
+          seller_response: string | null
+          status: Database["public"]["Enums"]["review_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       transition_payout_status: {
         Args: { p_new_status: string; p_payout_id: string }
         Returns: {
@@ -789,6 +834,7 @@ export type Database = {
         | "expired"
       payment_method: "mpesa" | "card"
       payment_status: "initiated" | "processing" | "succeeded" | "failed"
+      review_status: "visible" | "hidden"
       user_role: "buyer" | "seller" | "admin"
     }
     CompositeTypes: {
@@ -939,6 +985,7 @@ export const Constants = {
       ],
       payment_method: ["mpesa", "card"],
       payment_status: ["initiated", "processing", "succeeded", "failed"],
+      review_status: ["visible", "hidden"],
       user_role: ["buyer", "seller", "admin"],
     },
   },

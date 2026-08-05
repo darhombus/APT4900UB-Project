@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { Alert, Badge, Button, Price } from '$lib/components/ui';
+	import { Alert, Badge, Button, Price, Stars } from '$lib/components/ui';
+	import { ReviewList } from '$lib/components';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
+	import { averageRating, formatAverage, reviewCountLabel } from '$lib/reviews';
 	import { conditionLabel } from '$lib/validation/listings';
 	import { notifyFromResult } from '$lib/toast.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -12,6 +14,20 @@
 
 	const listing = $derived(data.listing);
 	const images = $derived(data.images);
+
+	// Plain averages (D7: the dampened score is a ranking device and never shown).
+	// Null means no reviews — every surface says so rather than rendering 0.0.
+	const listingAverage = $derived(
+		averageRating({ reviewCount: listing.review_count, ratingSum: listing.rating_sum })
+	);
+	const sellerAverage = $derived(
+		data.seller
+			? averageRating({
+					reviewCount: data.seller.review_count,
+					ratingSum: data.seller.rating_sum
+				})
+			: null
+	);
 
 	let selected = $state(0);
 	const mainUrl = $derived(
@@ -231,6 +247,23 @@
 		<!-- Details -->
 		<div>
 			<h1 class="font-display text-2xl font-bold text-ink">{listing.title}</h1>
+
+			<!-- Rating summary (Section 7.1). Sits under the title rather than beside
+			     the price: the price is deliberately the loudest thing on this page,
+			     and a rating competing with it at the same level would blunt that.
+			     Anchors to the review list below so the summary is a way in. -->
+			{#if listingAverage !== null}
+				<a
+					href="#reviews"
+					class="mt-2 inline-flex items-center gap-1.5 rounded-control hover:underline focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+				>
+					<Stars average={listingAverage} size="md" />
+					<span class="text-sm text-subtle">
+						({reviewCountLabel(listing.review_count)})
+					</span>
+				</a>
+			{/if}
+
 			<div class="mt-2"><Price amount={listing.price} size="xl" /></div>
 
 			{#if condition}
@@ -332,9 +365,50 @@
 				{/if}
 				<div>
 					<p class="font-medium text-ink">{data.seller?.full_name ?? 'Seller'}</p>
+					<!-- Seller-level aggregate (Section 8.2, R-6): across ALL their
+					     listings, so it says something about the seller rather than
+					     restating the rating shown above. This app has no public seller
+					     profile page (R-8 defers it), so it lands here. -->
+					{#if sellerAverage !== null}
+						<div class="mt-0.5 flex items-center gap-1.5">
+							<Stars average={sellerAverage} />
+							<span class="text-xs text-subtle">
+								({reviewCountLabel(data.seller!.review_count)} as a seller)
+							</span>
+						</div>
+					{/if}
 					{#if memberSince}<p class="text-xs text-subtle">Member since {memberSince}</p>{/if}
 				</div>
 			</div>
+
+			<!-- Reviews (Section 7.2). Below the listing details, and rendered on
+			     paused and sold listings identically — a sold item's reviews are the
+			     part of the page that still matters to a buyer sizing up the seller. -->
+			<div class="my-6 border-t border-border"></div>
+
+			<h2 id="reviews" class="scroll-mt-24 text-sm font-semibold text-ink">
+				Reviews{#if listing.review_count}<span class="ml-1 font-normal text-subtle"
+						>({listing.review_count})</span
+					>{/if}
+			</h2>
+
+			{#if listingAverage === null}
+				<p class="mt-2 text-sm text-subtle">
+					No reviews yet. Reviews come from buyers who completed an order for this listing.
+				</p>
+			{:else}
+				<div class="mt-3 flex items-baseline gap-2">
+					<span class="tnum font-display text-2xl font-bold text-ink">
+						{formatAverage(listingAverage)}
+					</span>
+					<Stars average={listingAverage} size="md" showValue={false} />
+					<span class="text-sm text-subtle">{reviewCountLabel(listing.review_count)}</span>
+				</div>
+
+				<div class="mt-4">
+					<ReviewList reviews={data.reviews} total={listing.review_count} />
+				</div>
+			{/if}
 		</div>
 	</div>
 </main>
