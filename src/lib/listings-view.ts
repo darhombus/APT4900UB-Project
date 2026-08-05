@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/types/database';
 import { getCoverUrl, coverPath } from '$lib/listing-images';
+import { averageRating } from '$lib/reviews';
 
 /**
  * A compact relative-time label ("3h ago", "2w ago"). Computed on the SERVER
@@ -40,6 +41,14 @@ export interface ListingCardData {
 	hasImage: boolean;
 	/** Subcategory name, shown as the label on the service-card variant. */
 	categoryLabel: string | null;
+	/**
+	 * Trigger-maintained aggregate for the compact stars (Reviews PRD Section 8).
+	 * Carried on the card row itself so a grid of cards costs no extra query —
+	 * a per-card lookup here would be the N+1 the denormalized columns exist to
+	 * prevent. Null average means no reviews, and the card omits the line.
+	 */
+	ratingAverage: number | null;
+	reviewCount: number;
 }
 
 type CardListing = {
@@ -55,6 +64,9 @@ type CardListing = {
 	type?: string | null;
 	/** Pre-resolved subcategory name (the loads resolve it from the category tree). */
 	categoryLabel?: string | null;
+	/** Aggregates maintained by the review triggers; absent on older callers. */
+	review_count?: number | null;
+	rating_sum?: number | null;
 };
 
 /** Map a listings row (with its embedded images) to the card view-model. */
@@ -73,6 +85,11 @@ export function toCardData(
 		postedLabel: relativeTime(listing.published_at ?? listing.created_at, now),
 		isService: listing.type === 'service',
 		hasImage: coverPath(listing.listing_images) !== null,
-		categoryLabel: listing.categoryLabel ?? null
+		categoryLabel: listing.categoryLabel ?? null,
+		ratingAverage: averageRating({
+			reviewCount: listing.review_count ?? 0,
+			ratingSum: listing.rating_sum ?? 0
+		}),
+		reviewCount: listing.review_count ?? 0
 	};
 }

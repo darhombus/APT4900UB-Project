@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		supabase
 			.from('listings')
 			.select(
-				'id, title, price, location_area, condition, published_at, created_at, type, category_id, listing_images(storage_path, position)'
+				'id, title, price, location_area, condition, published_at, created_at, type, category_id, review_count, rating_sum, listing_images(storage_path, position)'
 			)
 			.eq('status', 'active')
 			.order('published_at', { ascending: false })
