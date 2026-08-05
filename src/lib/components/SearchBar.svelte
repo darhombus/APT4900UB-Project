@@ -17,7 +17,7 @@
 	// JS it still GET-submits to /search. `use:autoClose` adds outside-click/Escape.
 	import { CONDITIONS, NAIROBI_AREAS } from '$lib/listing-constants';
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 
 	interface CategoryTop {
 		name: string;
@@ -55,6 +55,30 @@
 	const curConditions = $derived(sp.getAll('condition'));
 
 	let filtersEl = $state<HTMLDetailsElement | null>(null);
+	let inputEl = $state<HTMLInputElement | null>(null);
+
+	/** What the user has actually typed, which is NOT the same as `q`.
+	 *
+	 *  The box renders `value={q}` with no two-way binding, so text typed into it
+	 *  exists only in the DOM. `applyFilters` used to read `q` — the URL's query —
+	 *  and on a page with no `?q=` (the home page, say) that is the empty string,
+	 *  so a query typed and then filtered was silently dropped from the URL. The
+	 *  search form itself never had this problem: a native GET submit reads the
+	 *  DOM, not our state. */
+	function typedQuery(): string {
+		return (inputEl?.value ?? q).trim();
+	}
+
+	/** Re-sync the box to the URL after every in-app navigation.
+	 *
+	 *  The bar lives in the root layout and never re-mounts, and Svelte only
+	 *  rewrites `value={q}` when `q` itself changes — so text typed but never
+	 *  submitted would otherwise sit in the box forever, surviving navigation to
+	 *  pages that have no query at all. Same rule the filter controls already
+	 *  follow: the URL is the truth. */
+	afterNavigate(() => {
+		if (inputEl && inputEl.value !== q) inputEl.value = q;
+	});
 
 	/** Close the disclosure on an outside click or Escape (progressive enhancement;
 	 *  the native <details> already toggles open/closed on the summary click). */
@@ -85,7 +109,10 @@
 		// $lib/filter-nav). Omit empty fields; page resets to 1 by being absent.
 		const enc = encodeURIComponent;
 		const parts: string[] = [];
-		if (q) parts.push(`q=${enc(q)}`);
+		// The live box, not `q` — see typedQuery(). Filtering must never discard a
+		// query the user has typed but not yet submitted.
+		const typed = typedQuery();
+		if (typed) parts.push(`q=${enc(typed)}`);
 		const category = String(fd.get('category') ?? '');
 		if (category) parts.push(`category=${enc(category)}`);
 		const location = String(fd.get('location') ?? '');
@@ -115,6 +142,7 @@
 		class="flex flex-1 items-stretch overflow-hidden rounded-control border border-border bg-surface focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30"
 	>
 		<input
+			bind:this={inputEl}
 			type="search"
 			name="q"
 			value={q}
