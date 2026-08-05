@@ -92,7 +92,96 @@ export async function listReviewsForListing(
 	return (data ?? []).map((r) => toView(r as ReviewWithAuthor));
 }
 
+/** A review on one of the seller's own sales, with the listing it belongs to. */
+export interface SellerReviewView extends ReviewView {
+	listingId: string;
+	listingTitle: string;
+}
+
+/**
+ * Reviews written on the seller's listings, newest first (Section 6).
+ *
+ * No `status` filter is needed here and none is wanted: `reviews_select` already
+ * limits a seller to VISIBLE rows — the author carve-out is for authors, and a
+ * seller is not the author of a review about them. A hidden review is therefore
+ * invisible to the seller, which is the correct behaviour: `submit_seller_response`
+ * refuses to answer a hidden review anyway, so showing one would only offer a
+ * form that cannot succeed.
+ */
+export async function listReviewsForSeller(
+	supabase: SupabaseClient<Database>,
+	sellerId: string,
+	limit: number
+): Promise<SellerReviewView[]> {
+	const { data } = await supabase
+		.from('reviews')
+		.select(`${REVIEW_COLUMNS}, listing_id, listings(title)`)
+		.eq('seller_id', sellerId)
+		.order('created_at', { ascending: false })
+		.limit(limit);
+
+	return (data ?? []).map((row) => {
+		const r = row as ReviewWithAuthor & {
+			listing_id: string;
+			listings: { title: string } | null;
+		};
+		return {
+			...toView(r),
+			listingId: r.listing_id,
+			listingTitle: r.listings?.title ?? 'Listing no longer available'
+		};
+	});
+}
+
 export type InsertResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Post the seller's one-shot public reply (D5).
+ *
+ * Every authorization condition lives inside `submit_seller_response`: the
+ * caller must be the review's seller, no response may exist yet, and the review
+ * must be visible. `authenticated` holds no UPDATE grant on `reviews` at all, so
+ * this rpc is the only way a response can ever be written — there is no
+ * alternative path to keep in sync.
+ *
+ * The function signals refusal by RAISING, so every failure arrives here as an
+ * error rather than as an empty result. They are mapped to specific messages
+ * because they mean genuinely different things to the seller.
+ */
+export async function submitSellerResponse(
+	supabase: SupabaseClient<Database>,
+	reviewId: string,
+	response: string
+): Promise<InsertResult> {
+	const { error } = await supabase.rpc('submit_seller_response', {
+		review_id: reviewId,
+		response
+	});
+
+	if (!error) return { ok: true };
+
+	const message = error.message ?? '';
+	if (message.includes('response_empty')) {
+		return { ok: false, error: 'Write a reply before posting it.' };
+	}
+	if (message.includes('response_too_long')) {
+		return { ok: false, error: 'Keep your reply to 1000 characters or fewer.' };
+	}
+	if (message.includes('response_not_permitted')) {
+		// One message for three refusals — not your review, already answered, or
+		// hidden. Distinguishing them would tell a caller who is not the seller
+		// whether the review exists, and the honest cases (a second tab, a double
+		// submit) are all served by "already has a reply".
+		return {
+			ok: false,
+			error: 'That review can no longer be replied to. It may already have a reply.'
+		};
+	}
+	if (message.includes('not_authenticated')) {
+		return { ok: false, error: 'Log in again to reply.' };
+	}
+	return { ok: false, error: 'That reply could not be posted.' };
+}
 
 /**
  * Insert a review for an order the caller bought.
