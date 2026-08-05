@@ -6,9 +6,11 @@ import type { SearchQuery } from '$lib/search';
 type RpcArgs = Database['public']['Functions']['search_listings']['Args'];
 
 /**
- * Execute a composed search: call the `search_listings` RPC (which does the
- * active-only filter + ILIKE + CASE ranking), paginate with PostgREST `range`,
- * and get an exact count. Cover images are fetched for the page's rows and
+ * Execute a composed search: call the `search_listings` RPC — active-only
+ * full-text search over the weighted title/description vector, ranked by
+ * `ts_rank`, with a trigram typo-rescue fallback that fires only when a
+ * non-empty query matches nothing — then paginate with PostgREST `range` and
+ * get an exact count. Cover images are fetched for the page's rows and
  * attached, then mapped to card view-models. Null args are omitted so the SQL
  * defaults apply.
  */
@@ -29,7 +31,29 @@ export async function runSearch(
 		.rpc('search_listings', args, { count: 'exact' })
 		.range(query.from, query.to);
 
-	if (error || !data) return { listings: [], total: 0 };
+	if (error || !data) {
+		// Deliberately swallowed for the caller — an empty grid beats an error page —
+		// but a failing search is otherwise completely invisible. Log the tokens and
+		// which filters were active, which is what it takes to reproduce a tsquery
+		// construction failure.
+		console.error('[search] search_listings RPC failed', {
+			message: error?.message,
+			code: error?.code,
+			details: error?.details,
+			hint: error?.hint,
+			tokens: query.args.q,
+			sort: query.args.sort,
+			filters: {
+				category: query.args.category_ids !== null,
+				minPrice: query.args.min_price !== null,
+				maxPrice: query.args.max_price !== null,
+				condition: query.args.conditions !== null,
+				location: query.args.location !== null
+			},
+			page: query.page
+		});
+		return { listings: [], total: 0 };
+	}
 
 	// Cover images for just this page's rows.
 	const ids = data.map((r) => r.id);
