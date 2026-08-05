@@ -303,7 +303,11 @@ alter table public.reviews enable row level security;
 -- and therefore the owner of every SECURITY DEFINER function above) and
 -- `service_role` carry the BYPASSRLS role attribute, which outranks FORCE. It is
 -- set anyway so the table's own definition states the intent, and so the
--- guarantee survives an owner that later loses BYPASSRLS.
+-- guarantee survives an owner that later loses BYPASSRLS. Belt-and-braces
+-- against role-attribute divergence between the local and hosted stacks — the
+-- same class of local/hosted drift that the checkout grants hardening existed to
+-- close; verified inert on local (postgres and service_role hold BYPASSRLS) as
+-- of this migration.
 alter table public.reviews force row level security;
 
 -- Both shipped policies are replaced. `reviews_select using (true)` predates the
