@@ -1,6 +1,15 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Badge, Button, Card, Price } from '$lib/components/ui';
+	import {
+		Alert,
+		Badge,
+		Button,
+		Card,
+		Price,
+		Stars,
+		StarRatingInput,
+		Textarea
+	} from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import {
 		centsToMajor,
@@ -9,11 +18,12 @@
 		orderStatusVariant,
 		orderTimeline
 	} from '$lib/orders';
+	import { REVIEW_BODY_MAX } from '$lib/reviews';
 	import { notifyFromResult } from '$lib/toast.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const order = $derived(data.order);
 	const timeline = $derived(orderTimeline(order));
@@ -46,6 +56,38 @@
 			await update();
 			notifyFromResult(result, { redirect: 'Checkout cancelled.' });
 			cancelling = false;
+		};
+	};
+
+	// Reviews (Sections 4 and 5). The review area only exists on a completed
+	// order; `canReview` decides form vs read-only, and a hidden review takes a
+	// third path — it is neither editable nor re-writable while hidden.
+	const review = $derived(data.review);
+	const reviewHidden = $derived(review?.status === 'hidden');
+
+	const dateFmt = new Intl.DateTimeFormat('en-KE', {
+		day: 'numeric',
+		month: 'short',
+		year: 'numeric'
+	});
+
+	let submittingReview = $state(false);
+	const onReviewSubmit: SubmitFunction = () => {
+		submittingReview = true;
+		return async ({ result, update }) => {
+			await update();
+			notifyFromResult(result, { redirect: 'Review posted. Thanks!' });
+			submittingReview = false;
+		};
+	};
+
+	let deletingReview = $state(false);
+	const onReviewDelete: SubmitFunction = () => {
+		deletingReview = true;
+		return async ({ result, update }) => {
+			await update();
+			notifyFromResult(result, { redirect: 'Review removed.' });
+			deletingReview = false;
 		};
 	};
 </script>
@@ -152,6 +194,109 @@
 				</details>
 			{/if}
 		</div>
+	{/if}
+
+	<!-- Review (Sections 4, 5). Only on a completed order — there is nothing to
+	     review before the buyer has the item. -->
+	{#if data.canReview || review}
+		<Card class="mt-4 p-4">
+			<h2 class="text-sm font-semibold text-ink">
+				{review ? 'Your review' : 'Rate this seller'}
+			</h2>
+
+			{#if form?.reviewError}
+				<Alert variant="error" class="mt-3">{form.reviewError}</Alert>
+			{/if}
+
+			{#if data.canReview}
+				<p class="mt-1 text-sm text-muted">
+					How was it? Your rating shows on the listing and on the seller's profile.
+				</p>
+
+				<form method="POST" action="?/reviewSubmit" use:enhance={onReviewSubmit} class="mt-3">
+					<StarRatingInput error={form?.reviewError ? ' ' : undefined} />
+
+					<div class="mt-3">
+						<label for="body" class="mb-1 block text-sm font-medium text-ink">
+							Add a comment <span class="font-normal text-subtle">(optional)</span>
+						</label>
+						<Textarea
+							id="body"
+							name="body"
+							rows={4}
+							maxlength={REVIEW_BODY_MAX}
+							placeholder="What should other buyers know?"
+						/>
+					</div>
+
+					<Button type="submit" loading={submittingReview} class="mt-3 w-full sm:w-auto">
+						Post review
+					</Button>
+				</form>
+			{:else if review}
+				{#if reviewHidden}
+					<!-- The author carve-out in reviews_select is what makes this state
+					     visible at all. Saying so beats silently showing nothing, and the
+					     slot is NOT free — the row still holds the order's unique index. -->
+					<Alert variant="warning" class="mt-3">
+						This review is hidden and isn't shown on the listing.
+					</Alert>
+				{/if}
+
+				<div class="mt-3 flex items-center gap-2">
+					<Stars average={review.rating} showValue={false} size="md" />
+					<span class="text-xs text-subtle">
+						{dateFmt.format(new Date(review.createdAt))}
+					</span>
+				</div>
+
+				{#if review.body}
+					<p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-ink">{review.body}</p>
+				{/if}
+
+				{#if review.sellerResponse}
+					<div class="mt-3 rounded-control border-l-2 border-border bg-page py-2 pl-3">
+						<p class="text-xs font-medium text-muted">
+							Seller replied{review.sellerRespondedAt
+								? ` · ${dateFmt.format(new Date(review.sellerRespondedAt))}`
+								: ''}
+						</p>
+						<p class="mt-1 text-sm leading-relaxed whitespace-pre-line text-ink">
+							{review.sellerResponse}
+						</p>
+					</div>
+				{/if}
+
+				<!-- Delete confirm as a native <details>, matching the confirm-receipt
+				     pattern above: a real second action that works with JS off, and no
+				     dependence on window.confirm (Section 5.2). A review cannot be
+				     edited (D4) — removing it frees the slot to write a new one. -->
+				<details class="mt-4 rounded-control border border-border">
+					<summary
+						class="cursor-pointer list-none px-3 py-2 text-sm text-muted hover:text-ink [&::-webkit-details-marker]:hidden"
+					>
+						Remove review
+					</summary>
+					<div class="border-t border-border px-3 py-3">
+						<p class="text-sm text-muted">
+							This deletes your rating and any reply from the seller. You can write a new review for
+							this order afterwards.
+						</p>
+						<form method="POST" action="?/reviewDelete" use:enhance={onReviewDelete} class="mt-3">
+							<input type="hidden" name="reviewId" value={review.id} />
+							<Button
+								type="submit"
+								variant="secondary"
+								loading={deletingReview}
+								class="w-full sm:w-auto"
+							>
+								Remove review
+							</Button>
+						</form>
+					</div>
+				</details>
+			{/if}
+		</Card>
 	{/if}
 
 	{#if data.messageHref}
