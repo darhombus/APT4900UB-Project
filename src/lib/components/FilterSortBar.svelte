@@ -140,6 +140,13 @@
 		onsubmit={applyFilters}
 		class="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end lg:gap-4"
 	>
+		<!-- Preserve the active text query on the no-JS path. Without this the native
+		     GET submit posts only the filter fields, so `q` is dropped from the URL and
+		     the results silently widen to every listing. The JS path keeps it via
+		     buildFilterUrl. Same guard the SearchBar's filter form carries. -->
+		{#if params.q}
+			<input type="hidden" name="q" value={params.q} />
+		{/if}
 		{#if showCategory}
 			<div class="w-full lg:w-56">
 				<Label for={`${idPrefix}-category`}>Category</Label>
