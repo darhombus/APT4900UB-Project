@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { loadCategoryTree } from '$lib/server/categories';
+import { listReviewsForListing } from '$lib/server/reviews';
 import { publicUrl } from '$lib/listing-images';
 import { findSubcategory } from '$lib/validation/listings';
 import { findSpokenConversation, startConversation } from '$lib/server/messaging';
@@ -18,7 +19,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals: { supab
 	const { data: listing } = await supabase
 		.from('listings')
 		.select(
-			'id, seller_id, title, description, price, condition, location_area, status, published_at, created_at, category_id'
+			'id, seller_id, title, description, price, condition, location_area, status, published_at, created_at, category_id, review_count, rating_sum'
 		)
 		.eq('id', params.id)
 		.maybeSingle();
@@ -31,18 +32,26 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals: { supab
 	// (RLS also lets admins read them, but this page previews for the owner only.)
 	if (!isPublic && !isOwner) error(404, 'Listing not found');
 
-	const [imagesRes, sellerRes, tree] = await Promise.all([
+	// Section 7.5 — no pagination this phase; the newest REVIEW_PAGE_CAP are shown
+	// with a count note when there are more. The listing page paginates nothing
+	// else, so introducing a pager here for one section would be the odd one out.
+	const REVIEW_PAGE_CAP = 20;
+
+	const [imagesRes, sellerRes, tree, reviews] = await Promise.all([
 		supabase
 			.from('listing_images')
 			.select('id, storage_path, position')
 			.eq('listing_id', listing.id)
 			.order('position', { ascending: true }),
+		// review_count/rating_sum here are the SELLER-level aggregate across all
+		// their listings (D6) — the listing's own pair lives on the listing row.
 		supabase
 			.from('profiles')
-			.select('full_name, avatar_url, created_at')
+			.select('full_name, avatar_url, created_at, review_count, rating_sum')
 			.eq('id', listing.seller_id)
 			.single(),
-		loadCategoryTree(supabase)
+		loadCategoryTree(supabase),
+		listReviewsForListing(supabase, listing.id, REVIEW_PAGE_CAP)
 	]);
 
 	const images = (imagesRes.data ?? []).map((img) => ({
@@ -103,7 +112,8 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals: { supab
 		breadcrumb,
 		isOwner,
 		existingConversationId,
-		checkoutHold
+		checkoutHold,
+		reviews
 	};
 };
 
