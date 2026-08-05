@@ -15,8 +15,9 @@ import {
 export const SEARCH_PAGE_SIZE = 24;
 
 /** Upper bound on search tokens — a defensive cap so a pathological query can't
- *  expand into an unbounded AND of ILIKEs. Mirrored by the slot count in the
- *  `search_listings` RPC (extra tokens beyond this are dropped here, never sent). */
+ *  expand into an unbounded AND of tsquery terms (each token can itself expand
+ *  into a disjunction, so the cap matters more than the token count suggests).
+ *  Extra tokens beyond this are dropped here and never sent. */
 export const MAX_SEARCH_TOKENS = 6;
 
 export type SearchSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
@@ -45,7 +46,7 @@ export interface SearchParams {
 /** The composed RPC arguments + pagination window (the "query description"). */
 export interface SearchQuery {
 	args: {
-		q: string[]; // word tokens, AND-matched as full-text prefix terms; [] means no text filter
+		q: string[]; // raw word tokens, AND-matched as full-text terms; [] means no text filter
 		category_ids: string[] | null; // subtree-expanded; [] = a real but unknown slug
 		min_price: number | null;
 		max_price: number | null;
@@ -68,11 +69,17 @@ function toPositiveInt(value: string | null): number | null {
 	return n > 0 ? n : null;
 }
 
-/** Split a query into word tokens for AND matching (each becomes a prefix term
- *  in the search_listings full-text query): whitespace splits words, empty
- *  tokens are dropped, the count is capped. Returns [] for a blank query
- *  (→ no text filter). The SQL side strips each token to [a-z0-9] itself, so
- *  no escaping is needed here. */
+/** Split a query into word tokens for AND matching: whitespace splits words,
+ *  empty tokens are dropped, the count is capped. Returns [] for a blank query
+ *  (→ no text filter).
+ *
+ *  Tokens are passed through RAW and deliberately un-escaped. All sanitization
+ *  happens in `search_listings`, which strips each token to [a-z0-9] before
+ *  building the tsquery — a whitelist, so no input can carry tsquery operator
+ *  syntax regardless of what any caller sends. A token containing punctuation
+ *  expands there into both readings, e.g. "iphone-12" matches both "iPhone 12"
+ *  and "iPhone12". The raw form also feeds the trigram typo-rescue fallback,
+ *  which needs the original spelling to work. */
 export function tokenizeQuery(q: string): string[] {
 	return q
 		.split(/\s+/)
