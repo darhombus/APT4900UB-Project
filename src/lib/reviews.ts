@@ -65,7 +65,13 @@ export function formatAverage(average: number): string {
  * rating is indistinguishable from the item's.
  */
 export function ratingLabel(average: number, subject?: string): string {
-	const score = `${formatAverage(average)} out of 5`;
+	// Whole numbers announce without the decimal. A single review is always an
+	// integer 1–5, and it renders as stars with no visible number, so this label
+	// is its only textual form — "rated 4 out of 5" is what a person would say,
+	// where "4.0" reads like a measurement. Aggregates that land exactly on a
+	// whole number get the same treatment, which matches the filled stars.
+	const value = Number.isInteger(average) ? String(average) : formatAverage(average);
+	const score = `${value} out of 5`;
 	return subject ? `${subject} rated ${score}` : `Rated ${score}`;
 }
 

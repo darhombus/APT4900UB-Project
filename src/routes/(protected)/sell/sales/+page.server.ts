@@ -84,7 +84,26 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 	// rather than a column in the sales table.
 	const reviews = await listReviewsForSeller(supabase, user!.id, REVIEW_CAP);
 
-	return { sales, completedNet, reviews };
+	// The seller's own aggregate. Without this the only way for a seller to learn
+	// what they are rated is to open one of their public listings and read the
+	// seller block — their reputation visible to everyone except themselves.
+	// Counts ALL their reviews, which is why it is read here rather than derived
+	// from `reviews`: that list is capped at REVIEW_CAP.
+	const { data: me } = await supabase
+		.from('profiles')
+		.select('review_count, rating_sum')
+		.eq('id', user!.id)
+		.single();
+
+	return {
+		sales,
+		completedNet,
+		reviews,
+		sellerAggregate: {
+			reviewCount: me?.review_count ?? 0,
+			ratingSum: me?.rating_sum ?? 0
+		}
+	};
 };
 
 export const actions: Actions = {
