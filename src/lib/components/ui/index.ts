@@ -11,5 +11,6 @@ export { default as Card } from './Card.svelte';
 export { default as Badge } from './Badge.svelte';
 export { default as Price } from './Price.svelte';
 export { default as Alert } from './Alert.svelte';
+export { default as Avatar } from './Avatar.svelte';
 export { default as Stars } from './Stars.svelte';
 export { default as StarRatingInput } from './StarRatingInput.svelte';
