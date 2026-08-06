@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Alert, Badge, Button, Card, Price, Stars, Textarea } from '$lib/components/ui';
+	import { Alert, Avatar, Badge, Button, Card, Price, Stars, Textarea } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { centsToMajor, orderStatusLabel, orderStatusVariant } from '$lib/orders';
 	import { REVIEW_RESPONSE_MAX, averageRating, reviewCountLabel } from '$lib/reviews';
@@ -208,20 +208,27 @@
 				{#each data.reviews as review (review.id)}
 					<li>
 						<Card class="p-4">
-							<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-								<Stars average={review.rating} showValue={false} subject={review.authorName} />
-								<span class="text-sm font-medium text-ink">{review.authorName}</span>
-								<span class="text-xs text-subtle">
-									{dateFmt.format(new Date(review.createdAt))}
-								</span>
+							<!-- Same arrangement as the public list (ReviewList): who, then
+							     what they gave and when. The two render the same content and
+							     should not drift into different shapes. -->
+							<div class="flex gap-3">
+								<Avatar src={review.authorAvatarUrl} name={review.authorName} size="sm" />
+								<div class="min-w-0 flex-1">
+									<p class="text-sm font-medium text-ink">{review.authorName}</p>
+									<div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+										<Stars average={review.rating} showValue={false} subject={review.authorName} />
+										<span class="text-xs text-subtle">
+											{dateFmt.format(new Date(review.createdAt))}
+										</span>
+									</div>
+									<a
+										href={`/listings/${review.listingId}`}
+										class="mt-1 block truncate text-xs text-subtle hover:text-ink hover:underline"
+									>
+										on {review.listingTitle}
+									</a>
+								</div>
 							</div>
-
-							<a
-								href={`/listings/${review.listingId}`}
-								class="mt-1 block truncate text-xs text-subtle hover:text-ink hover:underline"
-							>
-								on {review.listingTitle}
-							</a>
 
 							{#if review.body}
 								<p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-ink">
