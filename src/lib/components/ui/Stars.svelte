@@ -20,10 +20,24 @@
 		size?: 'sm' | 'md';
 		/** Render the numeric average beside the stars. */
 		showValue?: boolean;
+		/**
+		 * Names what is being rated, for the accessible label — "Seller",
+		 * "This listing", or a reviewer's name. A page can carry several ratings
+		 * that a sighted reader separates by placement; a screen reader gets no
+		 * such cue, so pass this wherever more than one rating is in play.
+		 */
+		subject?: string;
 		class?: string;
 	}
 
-	let { average, count = null, size = 'sm', showValue = true, class: klass = '' }: Props = $props();
+	let {
+		average,
+		count = null,
+		size = 'sm',
+		showValue = true,
+		subject,
+		class: klass = ''
+	}: Props = $props();
 
 	const star = {
 		sm: 'h-3.5 w-3.5',
@@ -43,7 +57,7 @@
 		<!-- The stars themselves are decorative; the accessible name is on the
 		     wrapper, so a screen reader says "Rated 4.6 out of 5" once rather than
 		     announcing ten SVGs. -->
-		<span class="relative inline-flex" aria-label={ratingLabel(average)} role="img">
+		<span class="relative inline-flex" aria-label={ratingLabel(average, subject)} role="img">
 			<span class="inline-flex text-border" aria-hidden="true">
 				{#each [0, 1, 2, 3, 4] as i (i)}
 					<svg class={star[size]} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

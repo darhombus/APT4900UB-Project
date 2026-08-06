@@ -192,7 +192,7 @@
 					<li>
 						<Card class="p-4">
 							<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-								<Stars average={review.rating} showValue={false} />
+								<Stars average={review.rating} showValue={false} subject={review.authorName} />
 								<span class="text-sm font-medium text-ink">{review.authorName}</span>
 								<span class="text-xs text-subtle">
 									{dateFmt.format(new Date(review.createdAt))}
