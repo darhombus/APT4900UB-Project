@@ -257,7 +257,7 @@
 					href="#reviews"
 					class="mt-2 inline-flex items-center gap-1.5 rounded-control hover:underline focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
 				>
-					<Stars average={listingAverage} size="md" />
+					<Stars average={listingAverage} size="md" subject="This listing" />
 					<span class="text-sm text-subtle">
 						({reviewCountLabel(listing.review_count)})
 					</span>
@@ -376,8 +376,9 @@
 					     what the alternative was; reviews are one-way (D1), so there is
 					     no other role to contrast with. -->
 					{#if sellerAverage !== null}
-						<p class="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
-							<Stars average={sellerAverage} />
+						<p class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-subtle">
+							<span class="font-medium text-muted">Seller rating</span>
+							<Stars average={sellerAverage} subject="Seller" />
 							<span>· {reviewCountLabel(data.seller!.review_count)}</span>
 						</p>
 					{/if}
@@ -390,8 +391,11 @@
 			     part of the page that still matters to a buyer sizing up the seller. -->
 			<div class="my-6 border-t border-border"></div>
 
+			<!-- "of this listing" is load-bearing, not padding: the seller block above
+			     carries a rating too, and without the scope both headings-worth of
+			     stars read as the same thing. -->
 			<h2 id="reviews" class="scroll-mt-24 text-sm font-semibold text-ink">
-				Reviews{#if listing.review_count}<span class="ml-1 font-normal text-subtle"
+				Reviews of this listing{#if listing.review_count}<span class="ml-1 font-normal text-subtle"
 						>({listing.review_count})</span
 					>{/if}
 			</h2>
@@ -405,7 +409,7 @@
 					<span class="tnum font-display text-2xl font-bold text-ink">
 						{formatAverage(listingAverage)}
 					</span>
-					<Stars average={listingAverage} size="md" showValue={false} />
+					<Stars average={listingAverage} size="md" showValue={false} subject="This listing" />
 					<span class="text-sm text-subtle">{reviewCountLabel(listing.review_count)}</span>
 				</div>
 
