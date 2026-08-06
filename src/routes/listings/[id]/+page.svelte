@@ -368,14 +368,18 @@
 					<!-- Seller-level aggregate (Section 8.2, R-6): across ALL their
 					     listings, so it says something about the seller rather than
 					     restating the rating shown above. This app has no public seller
-					     profile page (R-8 defers it), so it lands here. -->
+					     profile page (R-8 defers it), so it lands here.
+					     Scope is carried by PLACEMENT — the line sits under the seller's
+					     name, between it and "Member since", so everything in this block
+					     reads as being about the person. An earlier version appended
+					     "as a seller" to spell that out, which only raised the question of
+					     what the alternative was; reviews are one-way (D1), so there is
+					     no other role to contrast with. -->
 					{#if sellerAverage !== null}
-						<div class="mt-0.5 flex items-center gap-1.5">
+						<p class="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
 							<Stars average={sellerAverage} />
-							<span class="text-xs text-subtle">
-								({reviewCountLabel(data.seller!.review_count)} as a seller)
-							</span>
-						</div>
+							<span>· {reviewCountLabel(data.seller!.review_count)}</span>
+						</p>
 					{/if}
 					{#if memberSince}<p class="text-xs text-subtle">Member since {memberSince}</p>{/if}
 				</div>
