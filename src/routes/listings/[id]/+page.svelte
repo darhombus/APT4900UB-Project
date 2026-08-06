@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { Alert, Badge, Button, Price, Stars } from '$lib/components/ui';
+	import { Alert, Avatar, Badge, Button, Price, Stars } from '$lib/components/ui';
 	import { ReviewList } from '$lib/components';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { averageRating, formatAverage, reviewCountLabel } from '$lib/reviews';
@@ -154,16 +154,6 @@
 	const metaDescription = $derived(
 		(listing.description || `${listing.title} on MySoko`).replace(/\s+/g, ' ').slice(0, 155)
 	);
-
-	function initials(name: string | null | undefined): string {
-		if (!name) return '?';
-		return name
-			.split(/\s+/)
-			.filter(Boolean)
-			.slice(0, 2)
-			.map((w) => w[0]!.toUpperCase())
-			.join('');
-	}
 
 	// Arrow keys move between thumbnails (the handler sits on each button, which is
 	// already interactive, so the roving selection stays keyboard-accessible).
@@ -354,15 +344,7 @@
 			<div class="my-6 border-t border-border"></div>
 
 			<div class="flex items-center gap-3">
-				{#if data.seller?.avatar_url}
-					<img src={data.seller.avatar_url} alt="" class="h-11 w-11 rounded-pill object-cover" />
-				{:else}
-					<span
-						class="flex h-11 w-11 items-center justify-center rounded-pill bg-brand-tint text-sm font-semibold text-brand-strong"
-					>
-						{initials(data.seller?.full_name)}
-					</span>
-				{/if}
+				<Avatar src={data.seller?.avatar_url} name={data.seller?.full_name} />
 				<div>
 					<p class="font-medium text-ink">{data.seller?.full_name ?? 'Seller'}</p>
 					<!-- Seller-level aggregate (Section 8.2, R-6): across ALL their
