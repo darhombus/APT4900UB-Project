@@ -3,7 +3,7 @@
 	import { Alert, Badge, Button, Card, Price, Stars, Textarea } from '$lib/components/ui';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { centsToMajor, orderStatusLabel, orderStatusVariant } from '$lib/orders';
-	import { REVIEW_RESPONSE_MAX } from '$lib/reviews';
+	import { REVIEW_RESPONSE_MAX, averageRating, reviewCountLabel } from '$lib/reviews';
 	import { notifyFromResult } from '$lib/toast.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
@@ -19,6 +19,10 @@
 	// Section 6. One reply per review, ever (D5) — a review either shows the
 	// seller's reply or the form to write it, never both and never an edit.
 	const awaitingReply = $derived(data.reviews.filter((r) => r.sellerResponse === null).length);
+
+	// The seller's own rating, across every listing they have sold. Null until
+	// someone reviews them, in which case the whole section is hidden anyway.
+	const sellerAverage = $derived(averageRating(data.sellerAggregate));
 
 	// Which review the enhanced submit is in flight for, so only that form's
 	// button spins rather than every button on the page.
@@ -179,7 +183,20 @@
 				{/if}
 			</div>
 
-			<p class="mt-1 text-sm text-muted">
+			<!-- The headline number: what buyers see about this seller. It spans ALL
+			     their listings, so it is deliberately not a summary of the list below,
+			     which is capped and can be a subset. -->
+			{#if sellerAverage !== null}
+				<p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+					<span class="text-sm font-medium text-muted">Your seller rating</span>
+					<Stars average={sellerAverage} size="md" subject="You" />
+					<span class="text-sm text-subtle">
+						· {reviewCountLabel(data.sellerAggregate.reviewCount)} across all your listings
+					</span>
+				</p>
+			{/if}
+
+			<p class="mt-2 text-sm text-muted">
 				You can reply once to each review. Replies are public and can't be edited afterwards.
 			</p>
 
