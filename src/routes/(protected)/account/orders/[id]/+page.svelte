@@ -244,7 +244,7 @@
 				{/if}
 
 				<div class="mt-3 flex items-center gap-2">
-					<Stars average={review.rating} showValue={false} size="md" />
+					<Stars average={review.rating} showValue={false} size="md" subject="You" />
 					<span class="text-xs text-subtle">
 						{dateFmt.format(new Date(review.createdAt))}
 					</span>

@@ -74,7 +74,12 @@
 			     reviews — an empty star row on every new listing would be noise, and
 			     a 0.0 would be a lie. -->
 			{#if listing.ratingAverage !== null}
-				<Stars average={listing.ratingAverage} count={listing.reviewCount} class="block" />
+				<Stars
+					average={listing.ratingAverage}
+					count={listing.reviewCount}
+					subject="This listing"
+					class="block"
+				/>
 			{/if}
 			<div class="flex items-center justify-between gap-2 text-xs text-subtle">
 				<span class="truncate">{listing.location_area ?? 'Nairobi'}</span>

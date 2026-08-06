@@ -55,9 +55,18 @@ export function formatAverage(average: number): string {
 	return average.toFixed(1);
 }
 
-/** Screen-reader text for a rating. Kept here so it never drifts per surface. */
-export function ratingLabel(average: number): string {
-	return `Rated ${formatAverage(average)} out of 5`;
+/**
+ * Screen-reader text for a rating. Kept here so it never drifts per surface.
+ *
+ * `subject` names WHAT is being rated. A listing page carries several ratings —
+ * the item's, the seller's, and one per review — and sighted readers tell them
+ * apart by where they sit. Placement conveys nothing to a screen reader, so
+ * without a subject they all announce the identical sentence and the seller's
+ * rating is indistinguishable from the item's.
+ */
+export function ratingLabel(average: number, subject?: string): string {
+	const score = `${formatAverage(average)} out of 5`;
+	return subject ? `${subject} rated ${score}` : `Rated ${score}`;
 }
 
 /** "1 review" / "12 reviews" — the count that sits beside the stars. */
