@@ -20,16 +20,18 @@ export interface ReviewView {
 	createdAt: string;
 	status: Database['public']['Enums']['review_status'];
 	authorName: string;
+	/** Reviewer's avatar, or null — the list falls back to their initials. */
+	authorAvatarUrl: string | null;
 	sellerResponse: string | null;
 	sellerRespondedAt: string | null;
 }
 
 /** Columns every review read needs, plus the author's display name. */
 const REVIEW_COLUMNS =
-	'id, rating, body, created_at, status, seller_response, seller_responded_at, buyer_id, profiles!reviews_buyer_id_fkey(full_name)';
+	'id, rating, body, created_at, status, seller_response, seller_responded_at, buyer_id, profiles!reviews_buyer_id_fkey(full_name, avatar_url)';
 
 type ReviewWithAuthor = Omit<ReviewRow, 'order_id' | 'listing_id' | 'seller_id'> & {
-	profiles: { full_name: string } | null;
+	profiles: { full_name: string; avatar_url: string | null } | null;
 };
 
 function toView(row: ReviewWithAuthor): ReviewView {
@@ -42,6 +44,7 @@ function toView(row: ReviewWithAuthor): ReviewView {
 		// A profile row is guaranteed by the FK, but the embed can still come back
 		// null if RLS hides it; "A buyer" beats rendering an empty byline.
 		authorName: row.profiles?.full_name ?? 'A buyer',
+		authorAvatarUrl: row.profiles?.avatar_url ?? null,
 		sellerResponse: row.seller_response,
 		sellerRespondedAt: row.seller_responded_at
 	};
