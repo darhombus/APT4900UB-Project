@@ -35,13 +35,23 @@
 		showFilters?: boolean;
 		/** Category taxonomy for the filter panel's category select (from the layout). */
 		categoryTree?: CategoryTop[];
+		/**
+		 * Namespace for this instance's field ids. The layout renders TWO search
+		 * bars — one per header row, since the search row is md:hidden — so a
+		 * hard-coded id appears twice in the document. Duplicate ids are invalid
+		 * HTML and break `<label for>`: the label activates only the FIRST match, so
+		 * on whichever bar renders second, clicking a field's label focuses the
+		 * other bar's hidden control. Mirrors FilterSortBar's idPrefix.
+		 */
+		idPrefix?: string;
 	}
 	let {
 		value,
 		placeholder = 'Search listings…',
 		class: klass = '',
 		showFilters = true,
-		categoryTree = []
+		categoryTree = [],
+		idPrefix = 'sb'
 	}: Props = $props();
 
 	// Current search state, read straight from the URL so the controls always mirror
@@ -197,8 +207,13 @@
 
 						{#if categoryTree.length}
 							<div>
-								<label class={fieldLabel} for="sb-category">Category</label>
-								<select id="sb-category" name="category" value={curCategory} class={control}>
+								<label class={fieldLabel} for={`${idPrefix}-category`}>Category</label>
+								<select
+									id={`${idPrefix}-category`}
+									name="category"
+									value={curCategory}
+									class={control}
+								>
 									<option value="">Any category</option>
 									{#each categoryTree as top (top.slug)}
 										<optgroup label={top.name}>
@@ -213,8 +228,13 @@
 						{/if}
 
 						<div>
-							<label class={fieldLabel} for="sb-location">Location</label>
-							<select id="sb-location" name="location" value={curLocation} class={control}>
+							<label class={fieldLabel} for={`${idPrefix}-location`}>Location</label>
+							<select
+								id={`${idPrefix}-location`}
+								name="location"
+								value={curLocation}
+								class={control}
+							>
 								<option value="">Any location</option>
 								{#each NAIROBI_AREAS as area (area)}
 									<option value={area}>{area}</option>
