@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/types/database';
+import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 
 /**
  * Server-side review reads and writes (Reviews PRD Sections 4, 5, 7).
@@ -99,6 +100,14 @@ export async function listReviewsForListing(
 export interface SellerReviewView extends ReviewView {
 	listingId: string;
 	listingTitle: string;
+	/**
+	 * Where to link the listing, or null when it has no page to reach.
+	 *
+	 * A soft-deleted listing is hidden by RLS from everyone including its owner,
+	 * so its page 404s for the seller too — linking it would be a dead end. The
+	 * title still shows (recovered below); only the link goes.
+	 */
+	listingHref: string | null;
 }
 
 /**
@@ -123,17 +132,35 @@ export async function listReviewsForSeller(
 		.order('created_at', { ascending: false })
 		.limit(limit);
 
-	return (data ?? []).map((row) => {
-		const r = row as ReviewWithAuthor & {
-			listing_id: string;
-			listings: { title: string } | null;
-		};
-		return {
-			...toView(r),
-			listingId: r.listing_id,
-			listingTitle: r.listings?.title ?? 'Listing no longer available'
-		};
-	});
+	const rows = (data ?? []) as (ReviewWithAuthor & {
+		listing_id: string;
+		listings: { title: string } | null;
+	})[];
+
+	// Same recovery the sales table does: a soft-deleted listing is invisible to
+	// its own owner through RLS, so the embed above returns null and the seller
+	// loses the title of the thing the review is about. Only runs when something
+	// is missing, and one query however many rows are affected. Safe past RLS
+	// because the ids come from reviews already filtered to this seller.
+	const hiddenIds = [...new Set(rows.filter((r) => !r.listings).map((r) => r.listing_id))];
+	const recovered = new Map<string, string>();
+
+	if (hiddenIds.length > 0) {
+		const { data: hidden } = await createSupabaseAdmin()
+			.from('listings')
+			.select('id, title')
+			.in('id', hiddenIds);
+		for (const l of hidden ?? []) recovered.set(l.id, l.title);
+	}
+
+	return rows.map((r) => ({
+		...toView(r),
+		listingId: r.listing_id,
+		// The embed seeing it and the seller's own listing page being reachable are
+		// the same condition — RLS answers both — so the embed IS the link test.
+		listingTitle: r.listings?.title ?? recovered.get(r.listing_id) ?? 'Listing no longer available',
+		listingHref: r.listings ? `/listings/${r.listing_id}` : null
+	}));
 }
 
 export type InsertResult = { ok: true } | { ok: false; error: string };

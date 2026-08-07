@@ -221,12 +221,22 @@
 											{dateFmt.format(new Date(review.createdAt))}
 										</span>
 									</div>
-									<a
-										href={`/listings/${review.listingId}`}
-										class="mt-1 block truncate text-xs text-subtle hover:text-ink hover:underline"
-									>
-										on {review.listingTitle}
-									</a>
+									<!-- A soft-deleted listing has no page to reach — its own owner
+									     gets a 404 — so it renders as plain text. A link that is
+									     certain to dead-end is worse than no link. -->
+									{#if review.listingHref}
+										<a
+											href={review.listingHref}
+											class="mt-1 block truncate text-xs text-subtle hover:text-ink hover:underline"
+										>
+											on {review.listingTitle}
+										</a>
+									{:else}
+										<p class="mt-1 truncate text-xs text-subtle">
+											on {review.listingTitle}
+											<span class="text-subtle/70">(removed)</span>
+										</p>
+									{/if}
 								</div>
 							</div>
 
