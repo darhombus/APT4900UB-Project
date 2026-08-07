@@ -484,8 +484,6 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
-          location: string | null
-          phone: string | null
           rating_sum: number
           review_count: number
           role: Database["public"]["Enums"]["user_role"]
@@ -496,8 +494,6 @@ export type Database = {
           created_at?: string
           full_name: string
           id: string
-          location?: string | null
-          phone?: string | null
           rating_sum?: number
           review_count?: number
           role?: Database["public"]["Enums"]["user_role"]
@@ -508,14 +504,41 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
-          location?: string | null
-          phone?: string | null
           rating_sum?: number
           review_count?: number
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
         Relationships: []
+      }
+      profiles_private: {
+        Row: {
+          id: string
+          location: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          location?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          location?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_private_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reviews: {
         Row: {
