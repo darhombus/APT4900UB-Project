@@ -281,7 +281,10 @@
 
 					<!-- Desktop: search is the dominant central instrument -->
 					<div class="hidden flex-1 md:block">
-						<SearchBar {categoryTree} />
+						<!-- Distinct idPrefix per instance: both bars exist in the DOM at once
+						     (each is hidden at the other's breakpoint), so shared field ids
+						     would be duplicates and `<label for>` would target the wrong one. -->
+						<SearchBar {categoryTree} idPrefix="sb-desktop" />
 					</div>
 
 					<!-- Mobile: spacer pushes the account cluster to the right -->
@@ -422,7 +425,7 @@
 
 				<!-- Row 2 (mobile only): search on its own full-width line, always visible -->
 				<div class="pb-2.5 md:hidden">
-					<SearchBar {categoryTree} />
+					<SearchBar {categoryTree} idPrefix="sb-mobile" />
 				</div>
 			</div>
 		</header>

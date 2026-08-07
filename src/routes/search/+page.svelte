@@ -17,6 +17,19 @@
 	// grid skeleton for that window — the header controls flip at click time.
 	const loading = $derived(navigating.to?.url.pathname === base);
 
+	// Skeletons answer "nothing is here yet"; they are the wrong answer to "these
+	// results are being narrowed". Refining a search you can already see — a filter,
+	// a sort, a page — replaced the grid with placeholders, which reads as starting
+	// over and throws away the visual anchor the user was working from. So:
+	// skeletons only when there is genuinely nothing on screen, and a quiet busy
+	// state over the existing results otherwise.
+	//
+	// This changes rendering only. No extra request, no extra data, and one less
+	// teardown/rebuild of the grid than before — the DOM is reused rather than
+	// swapped for placeholders and back.
+	const firstLoad = $derived(loading && data.listings.length === 0);
+	const refining = $derived(loading && data.listings.length > 0);
+
 	const clearAllUrl = $derived(
 		buildFilterUrl(base, p, {
 			category: '',
@@ -74,7 +87,7 @@
 		categoryName={data.categoryName}
 	/>
 
-	{#if loading}
+	{#if firstLoad}
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
 			{#each SKELETON_CARDS as i (i)}
 				<div class="animate-pulse overflow-hidden rounded-card border border-border bg-surface">
@@ -98,11 +111,19 @@
 			</p>
 		</div>
 	{:else}
-		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+		<div
+			class={`grid grid-cols-2 gap-3 transition-opacity motion-reduce:transition-none sm:grid-cols-3 xl:grid-cols-4 ${
+				refining ? 'opacity-50' : 'opacity-100'
+			}`}
+			aria-busy={refining ? 'true' : undefined}
+		>
 			{#each data.listings as listing (listing.id)}
 				<ListingCard {listing} />
 			{/each}
 		</div>
+		{#if refining}
+			<span class="sr-only" role="status">Updating results…</span>
+		{/if}
 
 		{#if data.totalPages > 1}
 			<nav class="flex items-center justify-center gap-1" aria-label="Pagination">

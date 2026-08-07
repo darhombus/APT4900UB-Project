@@ -17,6 +17,32 @@
 		!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 	const inMs = reduce ? 0 : 200;
 	const outMs = reduce ? 0 : 150;
+
+	/**
+	 * Any click anywhere clears the stack.
+	 *
+	 * A toast is a transient confirmation of something the user just did. Once
+	 * their attention has moved on far enough to click something else, it has
+	 * served its purpose, and leaving it parked over the page turns dismissal into
+	 * a small target to hunt for. The X and the auto-dismiss timer both remain.
+	 *
+	 * `armedAt` guards one real case. A toast can be raised from inside an event
+	 * handler — ImageUploader does exactly that when the chosen files exceed the
+	 * limit — and this listener is attached while that same event is still
+	 * propagating, so without the guard it would catch the very interaction that
+	 * produced the toast and clear it before it could be read. Re-armed on every
+	 * change to the stack, because each new toast deserves its own grace period.
+	 */
+	$effect(() => {
+		if (toast.items.length === 0) return;
+		const armedAt = Date.now();
+		const onDocumentClick = () => {
+			if (Date.now() - armedAt < 250) return;
+			toast.clear();
+		};
+		document.addEventListener('click', onDocumentClick);
+		return () => document.removeEventListener('click', onDocumentClick);
+	});
 </script>
 
 {#snippet glyph(variant: ToastVariant)}
