@@ -28,7 +28,19 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # PINNED. This was `latest`, and on 2026-08-08 that broke the deploy
+          # with no commit on our side: `supabase link` started failing with
+          #   failed to get api keys: SchemaError(Expected a string matching the
+          #   RegExp ^...T...Z$ at [2]["inserted_at"])
+          # i.e. the CLI rejecting the timestamp format the platform returns for
+          # the third API key. v2.112.0 published 2026-08-07T10:08Z, between the
+          # last green run (2026-08-05T20:50Z) and the failure.
+          #
+          # A tool in the deploy path that upgrades itself is a hazard, not a
+          # convenience: this workflow's behaviour must change only when someone
+          # changes it. Upgrades are a deliberate commit — bump this, watch a run
+          # go green, keep it.
+          version: 2.111.0
 
       - name: Link the hosted project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
