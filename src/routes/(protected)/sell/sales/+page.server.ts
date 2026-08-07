@@ -1,4 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
+import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { getCoverUrl } from '$lib/listing-images';
 import { listReviewsForSeller, submitSellerResponse } from '$lib/server/reviews';
 import { REVIEW_RESPONSE_MAX } from '$lib/reviews';
@@ -78,24 +79,63 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 		supabase.from('profiles').select('review_count, rating_sum').eq('id', user!.id).single()
 	]);
 
-	const rows = ordersRes.data;
+	const rows = ordersRes.data ?? [];
 	const me = meRes.data;
 
-	const sales = (rows ?? []).map((o) => ({
-		id: o.id,
-		status: o.status,
-		amountTotal: o.amount_total,
-		commissionAmount: o.commission_amount,
-		sellerNet: o.seller_net,
-		createdAt: o.created_at,
-		paidAt: o.paid_at,
-		listingId: o.listing_id,
-		title: o.listings?.title ?? 'Listing no longer available',
-		coverUrl: o.listings ? getCoverUrl(supabase, o.listings) : null,
-		// profiles are world-readable, so the seller's own client resolves the
-		// buyer's display name without any service-role escalation.
-		buyerName: o.profiles?.full_name ?? 'Buyer'
-	}));
+	// Recover listings the embed above could not see.
+	//
+	// A soft-deleted listing (status 'deleted') is hidden by RLS from EVERYONE,
+	// its owner included, so the `listings(...)` embed comes back null and the
+	// seller loses the title and photo of something they actually sold — in their
+	// own earnings record. The buyer's order page already refuses to let that
+	// happen (see account/orders/[id]: "an order's record must not stop rendering"
+	// because of a later soft-delete); this is the same guarantee for the seller.
+	//
+	// Runs ONLY when something is missing, so the ordinary page — where every
+	// listing is still visible — pays nothing for it. One query regardless of how
+	// many rows are affected.
+	//
+	// Safe to reach past RLS here: the ids come from orders already filtered to
+	// `seller_id = user.id`, so this can only ever resolve the caller's OWN
+	// listings, and only the two fields the row needs to render.
+	const hiddenIds = [...new Set(rows.filter((o) => !o.listings).map((o) => o.listing_id))];
+	const recovered = new Map<
+		string,
+		{ title: string; listing_images: { storage_path: string; position: number }[] }
+	>();
+
+	if (hiddenIds.length > 0) {
+		const { data: hidden } = await createSupabaseAdmin()
+			.from('listings')
+			.select('id, title, listing_images(storage_path, position)')
+			.in('id', hiddenIds);
+
+		for (const l of hidden ?? []) {
+			recovered.set(l.id, { title: l.title, listing_images: l.listing_images ?? [] });
+		}
+	}
+
+	const sales = rows.map((o) => {
+		// The embed when RLS allowed it, the service-role recovery when it did not.
+		const listing = o.listings ?? recovered.get(o.listing_id) ?? null;
+		return {
+			id: o.id,
+			status: o.status,
+			amountTotal: o.amount_total,
+			commissionAmount: o.commission_amount,
+			sellerNet: o.seller_net,
+			createdAt: o.created_at,
+			paidAt: o.paid_at,
+			listingId: o.listing_id,
+			// Only a listing that is genuinely gone from the database still reads as
+			// unavailable; a merely hidden one now shows what it always was.
+			title: listing?.title ?? 'Listing no longer available',
+			coverUrl: listing ? getCoverUrl(supabase, listing) : null,
+			// profiles are world-readable, so the seller's own client resolves the
+			// buyer's display name without any service-role escalation.
+			buyerName: o.profiles?.full_name ?? 'Buyer'
+		};
+	});
 
 	// Earned so far: only completed orders are payout-eligible (D5), so that is
 	// the figure worth surfacing rather than a total of everything ever started.
