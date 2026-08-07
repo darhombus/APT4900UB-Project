@@ -76,9 +76,11 @@
 
 		{#if data.reviews.length === 0}
 			<!-- The header has already said "No reviews yet" a few lines up, so this
-			     says the other half: where reviews come from, for a reader deciding
-			     whether an empty list means new or avoided. -->
-			<p class="mt-2 text-sm text-subtle">Reviews come from buyers who completed an order.</p>
+			     says the other half — what fills the space — rather than repeating
+			     the absence or defining what a review is. -->
+			<p class="mt-2 text-sm text-subtle">
+				Reviews will appear here once buyers complete an order.
+			</p>
 		{:else}
 			<div class="mt-4">
 				<ReviewList reviews={data.reviews} total={data.reviewTotal} />
