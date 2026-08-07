@@ -69,9 +69,16 @@
 			</span>
 			<!-- Clipped overlay. The inner row keeps its natural full width; the
 			     absolutely-positioned parent is what narrows, so the stars are cut
-			     rather than squashed. -->
+			     rather than squashed.
+			     `flex` is load-bearing, not decoration. Absolute positioning makes
+			     this a BLOCK container, so an inline-level child would sit in a line
+			     box and take the root line-height's half-leading — dropping the gold
+			     row a pixel or two below the grey row underneath it and leaving the
+			     empty stars visibly peeking out above. As a flex container there is
+			     no line box, so the child aligns flush at the top and the two rows
+			     register exactly. -->
 			<span
-				class="absolute top-0 left-0 overflow-hidden text-accent"
+				class="absolute top-0 left-0 flex overflow-hidden text-accent"
 				style={`width: ${fill}%`}
 				aria-hidden="true"
 			>

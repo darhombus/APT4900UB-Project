@@ -26,35 +26,60 @@ import type { Actions, PageServerLoad } from './$types';
 const REVIEW_CAP = 20;
 
 export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
-	const { data: rows } = await supabase
-		.from('orders')
-		// One string literal, not a concatenation: supabase-js infers the row type
-		// from the literal, and `a + b` widens it to `string` (every field then
-		// types as GenericStringError).
-		.select(
-			'id, status, amount_total, commission_amount, seller_net, created_at, paid_at, listing_id, buyer_id, listings(title, type, listing_images(storage_path, position)), profiles!orders_buyer_id_fkey(full_name)'
-		)
-		.eq('seller_id', user!.id)
-		// Sales only — orders that reached `paid` or beyond.
-		//
-		// A checkout that was cancelled or expired was never a sale, offers the
-		// seller nothing to act on (isTerminalOrderStatus already treats both as
-		// dead), and contributes nothing to the earnings figure above the list,
-		// which counts `completed` only. Left in, they would dominate: abandonment
-		// is the common outcome at checkout, and every abandoned attempt leaves a
-		// row — `cancelled` when the buyer backs out, `expired` when the Inngest
-		// job reaps the 30-minute hold. The real sales would end up scattered among
-		// them.
-		//
-		// `pending_payment` is excluded for the same reason: it is a hold in
-		// progress, not a sale, and it resolves within 30 minutes either way.
-		// `paid` IS included — the money is real and the seller is simply waiting
-		// on the buyer to confirm receipt.
-		//
-		// Nothing is deleted. The rows remain the audit trail, and abandonment is
-		// a question for a future analytics view rather than for this list.
-		.in('status', ['paid', 'completed'])
-		.order('created_at', { ascending: false });
+	// All three reads are independent — orders, the review list and the seller's
+	// own aggregate share nothing but the user id — so they go concurrently.
+	// Awaiting them in sequence costs two extra round trips on EVERY load of this
+	// page, and the browser Back button re-runs the load, which is where it was
+	// noticed: SvelteKit refetches __data.json on a history navigation, so the
+	// serial latency landed on exactly the interaction that feels like it should
+	// be instant.
+	const [ordersRes, reviews, meRes] = await Promise.all([
+		supabase
+			.from('orders')
+			// One string literal, not a concatenation: supabase-js infers the row type
+			// from the literal, and `a + b` widens it to `string` (every field then
+			// types as GenericStringError).
+			.select(
+				'id, status, amount_total, commission_amount, seller_net, created_at, paid_at, listing_id, buyer_id, listings(title, type, listing_images(storage_path, position)), profiles!orders_buyer_id_fkey(full_name)'
+			)
+			.eq('seller_id', user!.id)
+			// Sales only — orders that reached `paid` or beyond.
+			//
+			// A checkout that was cancelled or expired was never a sale, offers the
+			// seller nothing to act on (isTerminalOrderStatus already treats both as
+			// dead), and contributes nothing to the earnings figure above the list,
+			// which counts `completed` only. Left in, they would dominate: abandonment
+			// is the common outcome at checkout, and every abandoned attempt leaves a
+			// row — `cancelled` when the buyer backs out, `expired` when the Inngest
+			// job reaps the 30-minute hold. The real sales would end up scattered among
+			// them.
+			//
+			// `pending_payment` is excluded for the same reason: it is a hold in
+			// progress, not a sale, and it resolves within 30 minutes either way.
+			// `paid` IS included — the money is real and the seller is simply waiting
+			// on the buyer to confirm receipt.
+			//
+			// Nothing is deleted. The rows remain the audit trail, and abandonment is
+			// a question for a future analytics view rather than for this list.
+			.in('status', ['paid', 'completed'])
+			.order('created_at', { ascending: false }),
+
+		// Reviews buyers left on this seller's listings (Section 6). Fetched
+		// independently of `sales` rather than joined onto it: a review outlives the
+		// window this list shows, and the reviews section is its own block on the
+		// page rather than a column in the sales table.
+		listReviewsForSeller(supabase, user!.id, REVIEW_CAP),
+
+		// The seller's own aggregate. Without this the only way for a seller to
+		// learn what they are rated is to open one of their public listings and read
+		// the seller block — their reputation visible to everyone except themselves.
+		// Counts ALL their reviews, which is why it is read here rather than derived
+		// from `reviews`: that list is capped at REVIEW_CAP.
+		supabase.from('profiles').select('review_count, rating_sum').eq('id', user!.id).single()
+	]);
+
+	const rows = ordersRes.data;
+	const me = meRes.data;
 
 	const sales = (rows ?? []).map((o) => ({
 		id: o.id,
@@ -77,23 +102,6 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 	const completedNet = sales
 		.filter((s) => s.status === 'completed')
 		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
-
-	// Reviews buyers left on this seller's listings (Section 6). Fetched
-	// independently of `sales` rather than joined onto it: a review outlives the
-	// window this list shows, and the reviews section is its own block on the page
-	// rather than a column in the sales table.
-	const reviews = await listReviewsForSeller(supabase, user!.id, REVIEW_CAP);
-
-	// The seller's own aggregate. Without this the only way for a seller to learn
-	// what they are rated is to open one of their public listings and read the
-	// seller block — their reputation visible to everyone except themselves.
-	// Counts ALL their reviews, which is why it is read here rather than derived
-	// from `reviews`: that list is capped at REVIEW_CAP.
-	const { data: me } = await supabase
-		.from('profiles')
-		.select('review_count, rating_sum')
-		.eq('id', user!.id)
-		.single();
 
 	return {
 		sales,
