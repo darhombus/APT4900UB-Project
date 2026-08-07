@@ -101,47 +101,59 @@ export interface SellerReviewView extends ReviewView {
 	listingId: string;
 	listingTitle: string;
 	/**
-	 * Where to link the listing, or null when it has no page to reach.
+	 * Where to link the listing, or null when THIS VIEWER has no page to reach.
 	 *
 	 * A soft-deleted listing is hidden by RLS from everyone including its owner,
 	 * so its page 404s for the seller too — linking it would be a dead end. The
-	 * title still shows (recovered below); only the link goes.
+	 * title still shows (recovered below); only the link goes. A public viewer
+	 * loses the link for drafts, paused and removed listings as well, which 404
+	 * for them too — so the rule is the same one, evaluated per viewer.
 	 */
 	listingHref: string | null;
 }
 
 /**
- * Reviews written on the seller's listings, newest first (Section 6).
+ * Shared body of the two seller-review reads below.
  *
- * No `status` filter is needed here and none is wanted: `reviews_select` already
- * limits a seller to VISIBLE rows — the author carve-out is for authors, and a
- * seller is not the author of a review about them. A hidden review is therefore
- * invisible to the seller, which is the correct behaviour: `submit_seller_response`
- * refuses to answer a hidden review anyway, so showing one would only offer a
- * form that cannot succeed.
+ * Private on purpose. `visibleOnly` decides whether hidden reviews can reach the
+ * caller, which is the kind of flag that must never be passed by a caller who has
+ * not thought about it — so it is not part of the exported surface. The two
+ * wrappers are named for their AUDIENCE instead, and each carries the RLS
+ * reasoning that makes its answer the right one (seller profile phase, SP-1).
  */
-export async function listReviewsForSeller(
+async function sellerReviews(
 	supabase: SupabaseClient<Database>,
 	sellerId: string,
-	limit: number
+	limit: number,
+	visibleOnly: boolean
 ): Promise<SellerReviewView[]> {
-	const { data } = await supabase
+	let query = supabase
 		.from('reviews')
 		.select(`${REVIEW_COLUMNS}, listing_id, listings(title)`)
-		.eq('seller_id', sellerId)
-		.order('created_at', { ascending: false })
-		.limit(limit);
+		.eq('seller_id', sellerId);
+
+	if (visibleOnly) query = query.eq('status', 'visible');
+
+	const { data } = await query.order('created_at', { ascending: false }).limit(limit);
 
 	const rows = (data ?? []) as (ReviewWithAuthor & {
 		listing_id: string;
 		listings: { title: string } | null;
 	})[];
 
-	// Same recovery the sales table does: a soft-deleted listing is invisible to
-	// its own owner through RLS, so the embed above returns null and the seller
-	// loses the title of the thing the review is about. Only runs when something
-	// is missing, and one query however many rows are affected. Safe past RLS
-	// because the ids come from reviews already filtered to this seller.
+	// Same recovery the sales table does: a listing the VIEWER cannot see through
+	// RLS nulls the embed above, and the review loses the title of the thing it is
+	// about. Only runs when something is missing, and one query however many rows
+	// are affected.
+	//
+	// Safe past RLS because the ids come from reviews already scoped to this
+	// seller, and only the title is read. What that exposes differs by audience:
+	// the seller loses only `deleted` listings to RLS, while a public viewer also
+	// misses drafts, paused and removed ones — so on the profile page this can
+	// surface the title of a listing anon could not otherwise read. That is the
+	// exposure SP-1 accepted, and it is strictly narrower than the anon-granted
+	// SECURITY DEFINER function D7 originally proposed: titles of listings that
+	// already carry a publicly visible review by this seller.
 	const hiddenIds = [...new Set(rows.filter((r) => !r.listings).map((r) => r.listing_id))];
 	const recovered = new Map<string, string>();
 
@@ -156,11 +168,49 @@ export async function listReviewsForSeller(
 	return rows.map((r) => ({
 		...toView(r),
 		listingId: r.listing_id,
-		// The embed seeing it and the seller's own listing page being reachable are
-		// the same condition — RLS answers both — so the embed IS the link test.
+		// The embed seeing it and the listing page being reachable BY THIS VIEWER are
+		// the same condition — RLS answers both — so the embed IS the link test, and
+		// it stays correct when the viewer changes from the seller to the public.
 		listingTitle: r.listings?.title ?? recovered.get(r.listing_id) ?? 'Listing no longer available',
 		listingHref: r.listings ? `/listings/${r.listing_id}` : null
 	}));
+}
+
+/**
+ * Reviews written on the seller's listings, for the SELLER's own sales page
+ * (Section 6).
+ *
+ * No `status` filter is needed here and none is wanted: `reviews_select` already
+ * limits a seller to VISIBLE rows — the author carve-out is for authors, and a
+ * seller is not the author of a review about them. A hidden review is therefore
+ * invisible to the seller, which is the correct behaviour: `submit_seller_response`
+ * refuses to answer a hidden review anyway, so showing one would only offer a
+ * form that cannot succeed.
+ */
+export async function listReviewsForSeller(
+	supabase: SupabaseClient<Database>,
+	sellerId: string,
+	limit: number
+): Promise<SellerReviewView[]> {
+	return sellerReviews(supabase, sellerId, limit, false);
+}
+
+/**
+ * The same reviews for the PUBLIC seller profile page, filtered to visible only.
+ *
+ * The filter is explicit and load-bearing, and the reasoning above does not carry
+ * over: on a public page the author carve-out in `reviews_select` means a viewer
+ * reading a seller they themselves reviewed would see their OWN hidden review in
+ * a list whose aggregate count (from `profiles.review_count`) excludes it. The
+ * page would then contradict itself for exactly one person — the same
+ * self-contradiction the listing-page list avoids the same way (REV Section 7.3).
+ */
+export async function listVisibleReviewsForSeller(
+	supabase: SupabaseClient<Database>,
+	sellerId: string,
+	limit: number
+): Promise<SellerReviewView[]> {
+	return sellerReviews(supabase, sellerId, limit, true);
 }
 
 export type InsertResult = { ok: true } | { ok: false; error: string };

@@ -19,6 +19,17 @@ export const REVIEW_BODY_MAX = 1000;
 /** D5 — seller response cap, mirrored by `reviews_seller_response_len` in SQL. */
 export const REVIEW_RESPONSE_MAX = 1000;
 
+/**
+ * How many reviews a page shows before it stops and says how many there are.
+ *
+ * Reviews PRD Section 7.5 — the newest CAP with a count note when there are more,
+ * rather than a pager: the pages that carry a review list paginate nothing else,
+ * so a pager for one section would be the odd one out. Shared rather than
+ * per-route so "the 20 most recent" means the same on every surface (seller
+ * profile phase, SP-8).
+ */
+export const REVIEW_PAGE_CAP = 20;
+
 /** The 1–5 values a rating may take, low to high. */
 export const RATING_VALUES = [1, 2, 3, 4, 5] as const;
 

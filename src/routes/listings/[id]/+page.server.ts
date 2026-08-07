@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { loadCategoryTree } from '$lib/server/categories';
 import { listReviewsForListing } from '$lib/server/reviews';
+import { REVIEW_PAGE_CAP } from '$lib/reviews';
 import { publicUrl } from '$lib/listing-images';
 import { findSubcategory } from '$lib/validation/listings';
 import { findSpokenConversation, startConversation } from '$lib/server/messaging';
@@ -31,11 +32,6 @@ export const load: PageServerLoad = async ({ params, setHeaders, locals: { supab
 	// The public page is owner-only for non-public statuses (drafts/removed).
 	// (RLS also lets admins read them, but this page previews for the owner only.)
 	if (!isPublic && !isOwner) error(404, 'Listing not found');
-
-	// Section 7.5 — no pagination this phase; the newest REVIEW_PAGE_CAP are shown
-	// with a count note when there are more. The listing page paginates nothing
-	// else, so introducing a pager here for one section would be the odd one out.
-	const REVIEW_PAGE_CAP = 20;
 
 	const [imagesRes, sellerRes, tree, reviews] = await Promise.all([
 		supabase
