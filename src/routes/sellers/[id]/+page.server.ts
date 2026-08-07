@@ -30,9 +30,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		// item). What it does guarantee is that `phone`, `location` and `role`
 		// never enter this page's payload. Same columns the listing page's seller
 		// block selects.
+		// `role` is read for the SP-16 gate below and never returned — see the
+		// destructure at the end, which is why this select is not spread wholesale.
 		supabase
 			.from('profiles')
-			.select('full_name, avatar_url, created_at, review_count, rating_sum')
+			.select('full_name, avatar_url, created_at, review_count, rating_sum, role')
 			.eq('id', params.id)
 			.maybeSingle(),
 
@@ -62,28 +64,52 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		listVisibleReviewsForSeller(supabase, params.id, REVIEW_PAGE_CAP)
 	]);
 
-	// D1/SP-3, first case: no such profile — a hard 404, mirroring `/listings/[id]`.
-	// A malformed uuid lands here too: PostgREST rejects it, `maybeSingle` yields
-	// null data, and a bad id is a missing page either way.
+	// D1, split by SP-3 and extended to a third case by SP-16. Three outcomes:
 	//
-	// The second case is NOT an error and is handled by the page: a real seller
-	// with no reviews and no active listings gets the D2 zero states.
-	if (!profileRes.data) error(404, 'Seller not found');
+	//  1. No such profile — a hard 404, mirroring `/listings/[id]`. A malformed
+	//     uuid lands here too: PostgREST rejects it, `maybeSingle` yields null
+	//     data, and a bad id is a missing page either way.
+	//  2. The profile exists but is NOT a seller — also a hard 404, and
+	//     deliberately the SAME one: same status, same message, nothing that
+	//     distinguishes it from case 1. Otherwise every account on the platform
+	//     becomes enumerable by URL, and rendering the page instead would assert
+	//     something false — a buyer framed as a seller with an empty shop. D6
+	//     governs exactly this kind of presentation-layer framing.
+	//  3. A seller with an empty history — NOT an error. That one is the page's
+	//     job, and it gets the D2 zero states.
+	//
+	// The test is POSITIVE (`=== 'seller'`) rather than `!== 'buyer'`, so a role
+	// added later fails closed and has to be admitted on purpose (SP-16). `admin`
+	// fails it today by design (SP-17) — the reconciliation that implies is a
+	// named deferred decision, not an oversight.
+	const profile = profileRes.data;
+	if (!profile || profile.role !== 'seller') error(404, 'Seller not found');
 
 	const names = subcategoryNameMap(tree);
 	const listings = (listingsRes.data ?? []).map((l) =>
 		toCardData(supabase, { ...l, categoryLabel: names.get(l.category_id) ?? null })
 	);
 
+	// `role` was read for the gate above and stops here. Written out field by field
+	// rather than spread-minus-role, so what the page ships is a list you can read
+	// in one glance — the same discipline D6 asks of the select itself.
+	const seller = {
+		full_name: profile.full_name,
+		avatar_url: profile.avatar_url,
+		created_at: profile.created_at,
+		review_count: profile.review_count,
+		rating_sum: profile.rating_sum
+	};
+
 	return {
-		seller: profileRes.data,
+		seller,
 		reviews,
 		listings,
 		// Totals the page needs to say what it is showing. `reviewTotal` comes from
 		// the trigger-maintained aggregate rather than a count query — it is the
 		// same number the seller-level average is computed from, so the list note
 		// and the aggregate can never disagree.
-		reviewTotal: profileRes.data.review_count,
+		reviewTotal: profile.review_count,
 		listingTotal: listingsRes.count ?? listings.length,
 		listingCap: ACTIVE_LISTINGS_CAP
 	};
