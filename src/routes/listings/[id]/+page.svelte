@@ -343,14 +343,24 @@
 
 			<div class="my-6 border-t border-border"></div>
 
-			<div class="flex items-center gap-3">
+			<!-- The whole block is the link, not just the name: the aggregate line is
+			     conditional, so a seller with no reviews shows only a name and "Member
+			     since", and a link anchored to either would disappear for exactly the
+			     sellers a buyer most wants to look up. A plain anchor, so it navigates
+			     before hydration. The negative margin cancels the padding, so the hover
+			     surface exists without moving the block off its rule. -->
+			<a
+				href={`/sellers/${listing.seller_id}`}
+				class="group -m-2 flex items-center gap-3 rounded-control p-2 transition-colors hover:bg-page focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+			>
 				<Avatar src={data.seller?.avatar_url} name={data.seller?.full_name} />
 				<div>
-					<p class="font-medium text-ink">{data.seller?.full_name ?? 'Seller'}</p>
-					<!-- Seller-level aggregate (Section 8.2, R-6): across ALL their
+					<p class="font-medium text-ink group-hover:underline">
+						{data.seller?.full_name ?? 'Seller'}
+					</p>
+					<!-- Seller-level aggregate (Section 8.2, REV-6): across ALL their
 					     listings, so it says something about the seller rather than
-					     restating the rating shown above. This app has no public seller
-					     profile page (R-8 defers it), so it lands here.
+					     restating the rating shown above.
 					     Scope is carried by PLACEMENT — the line sits under the seller's
 					     name, between it and "Member since", so everything in this block
 					     reads as being about the person. An earlier version appended
@@ -366,7 +376,7 @@
 					{/if}
 					{#if memberSince}<p class="text-xs text-subtle">Member since {memberSince}</p>{/if}
 				</div>
-			</div>
+			</a>
 
 			<!-- Reviews (Section 7.2). Below the listing details, and rendered on
 			     paused and sold listings identically — a sold item's reviews are the
