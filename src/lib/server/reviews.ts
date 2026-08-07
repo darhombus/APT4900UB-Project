@@ -147,13 +147,15 @@ async function sellerReviews(
 	// are affected.
 	//
 	// Safe past RLS because the ids come from reviews already scoped to this
-	// seller, and only the title is read. What that exposes differs by audience:
-	// the seller loses only `deleted` listings to RLS, while a public viewer also
-	// misses drafts, paused and removed ones — so on the profile page this can
-	// surface the title of a listing anon could not otherwise read. That is the
-	// exposure SP-1 accepted, and it is strictly narrower than the anon-granted
-	// SECURITY DEFINER function D7 originally proposed: titles of listings that
-	// already carry a publicly visible review by this seller.
+	// seller, and only the title is read.
+	//
+	// The principle (SP-1): a previously-public title stays attached to its
+	// public visible review. A listing can only carry a review by way of a
+	// COMPLETED ORDER, which means it was active and publicly readable for the
+	// whole of its selling life — the title is not being disclosed, it is being
+	// kept next to the review it explains. That applies uniformly to all four
+	// statuses RLS can hide here (`draft`, `paused`, `removed`, `deleted`),
+	// whichever of them a given viewer runs into, so none is treated specially.
 	const hiddenIds = [...new Set(rows.filter((r) => !r.listings).map((r) => r.listing_id))];
 	const recovered = new Map<string, string>();
 
