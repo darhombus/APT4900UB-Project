@@ -1,0 +1,90 @@
+import { error } from '@sveltejs/kit';
+import { loadCategoryTree } from '$lib/server/categories';
+import { listVisibleReviewsForSeller } from '$lib/server/reviews';
+import { REVIEW_PAGE_CAP } from '$lib/reviews';
+import { toCardData } from '$lib/listings-view';
+import { subcategoryNameMap } from '$lib/validation/listings';
+import type { PageServerLoad } from './$types';
+
+/**
+ * How many active listings the profile grid shows (SP-9).
+ *
+ * A plain cap in the home page's style, not the numbered pager `/search` and
+ * `/c/[slug]` carry: that pager is bound to the search-params model
+ * (`parseSearchParams` / `buildFilterUrl`) which this route has no part of, and
+ * this page already caps its review list rather than paginating it. One
+ * treatment per page beats two.
+ */
+const ACTIVE_LISTINGS_CAP = 24;
+
+export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+	// All four reads are keyed off the route param alone — none depends on what
+	// another returns — so they go out together and the 404 is decided after.
+	// (The listing page fetches its row first only because everything it loads
+	// afterwards needs that row's ids; there is no such dependency here.)
+	const [profileRes, listingsRes, tree, reviews] = await Promise.all([
+		// D6 — an explicit column list, never `select *`. This is presentation
+		// discipline, not a security boundary: `profiles_select` is `using (true)`,
+		// so anon can read `phone` and every other column straight from PostgREST
+		// regardless of what this page ships (SP-5, and the deferred hardening
+		// item). What it does guarantee is that `phone`, `location` and `role`
+		// never enter this page's payload. Same columns the listing page's seller
+		// block selects.
+		supabase
+			.from('profiles')
+			.select('full_name, avatar_url, created_at, review_count, rating_sum')
+			.eq('id', params.id)
+			.maybeSingle(),
+
+		// The card contract, fed from a straight listings query — no RPC, because
+		// this grid has no query, no ranking and no filters. `count: 'exact'` comes
+		// back on the SAME request as the capped rows, so the "showing 24 of N"
+		// note costs nothing extra (SP-9 anticipated a second query; there isn't one).
+		supabase
+			.from('listings')
+			.select(
+				'id, title, price, location_area, condition, published_at, created_at, type, category_id, review_count, rating_sum, listing_images(storage_path, position)',
+				{ count: 'exact' }
+			)
+			.eq('seller_id', params.id)
+			.eq('status', 'active')
+			.order('published_at', { ascending: false })
+			.order('id', { ascending: true }) // stable tiebreaker, per the home page
+			.limit(ACTIVE_LISTINGS_CAP),
+
+		// Needed for `categoryLabel`, which is not a column: it is resolved per row
+		// from the tree. Without it the photo-less SERVICE card variant loses the
+		// label that is the whole point of that variant.
+		loadCategoryTree(supabase),
+
+		// Visible-only (SP-1). The seller's own sales page deliberately skips this
+		// filter; a public page cannot — see listVisibleReviewsForSeller.
+		listVisibleReviewsForSeller(supabase, params.id, REVIEW_PAGE_CAP)
+	]);
+
+	// D1/SP-3, first case: no such profile — a hard 404, mirroring `/listings/[id]`.
+	// A malformed uuid lands here too: PostgREST rejects it, `maybeSingle` yields
+	// null data, and a bad id is a missing page either way.
+	//
+	// The second case is NOT an error and is handled by the page: a real seller
+	// with no reviews and no active listings gets the D2 zero states.
+	if (!profileRes.data) error(404, 'Seller not found');
+
+	const names = subcategoryNameMap(tree);
+	const listings = (listingsRes.data ?? []).map((l) =>
+		toCardData(supabase, { ...l, categoryLabel: names.get(l.category_id) ?? null })
+	);
+
+	return {
+		seller: profileRes.data,
+		reviews,
+		listings,
+		// Totals the page needs to say what it is showing. `reviewTotal` comes from
+		// the trigger-maintained aggregate rather than a count query — it is the
+		// same number the seller-level average is computed from, so the list note
+		// and the aggregate can never disagree.
+		reviewTotal: profileRes.data.review_count,
+		listingTotal: listingsRes.count ?? listings.length,
+		listingCap: ACTIVE_LISTINGS_CAP
+	};
+};

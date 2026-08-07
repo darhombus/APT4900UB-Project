@@ -14,7 +14,7 @@
 		src?: string | null;
 		/** Used for the initials fallback. */
 		name?: string | null;
-		size?: 'sm' | 'md';
+		size?: 'sm' | 'md' | 'lg';
 		class?: string;
 	}
 
@@ -22,7 +22,9 @@
 
 	const box = {
 		sm: 'h-9 w-9 text-xs',
-		md: 'h-11 w-11 text-sm'
+		md: 'h-11 w-11 text-sm',
+		// For a page whose SUBJECT is the person, where `md` reads as a byline.
+		lg: 'h-16 w-16 text-xl'
 	} as const;
 
 	function initials(value: string | null | undefined): string {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Alert, Avatar, Badge, Button, Card, Price, Stars, Textarea } from '$lib/components/ui';
+	import { Alert, Badge, Button, Card, Price, Stars, Textarea } from '$lib/components/ui';
+	import { ReviewByline } from '$lib/components';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import { centsToMajor, orderStatusLabel, orderStatusVariant } from '$lib/orders';
 	import { REVIEW_RESPONSE_MAX, averageRating, reviewCountLabel } from '$lib/reviews';
@@ -208,37 +209,15 @@
 				{#each data.reviews as review (review.id)}
 					<li>
 						<Card class="p-4">
-							<!-- Same arrangement as the public list (ReviewList): who, then
-							     what they gave and when. The two render the same content and
-							     should not drift into different shapes. -->
-							<div class="flex gap-3">
-								<Avatar src={review.authorAvatarUrl} name={review.authorName} size="sm" />
-								<div class="min-w-0 flex-1">
-									<p class="text-sm font-medium text-ink">{review.authorName}</p>
-									<div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-										<Stars average={review.rating} showValue={false} subject={review.authorName} />
-										<span class="text-xs text-subtle">
-											{dateFmt.format(new Date(review.createdAt))}
-										</span>
-									</div>
-									<!-- A soft-deleted listing has no page to reach — its own owner
-									     gets a 404 — so it renders as plain text. A link that is
-									     certain to dead-end is worse than no link. -->
-									{#if review.listingHref}
-										<a
-											href={review.listingHref}
-											class="mt-1 block truncate text-xs text-subtle hover:text-ink hover:underline"
-										>
-											on {review.listingTitle}
-										</a>
-									{:else}
-										<p class="mt-1 truncate text-xs text-subtle">
-											on {review.listingTitle}
-											<span class="text-subtle/70">(removed)</span>
-										</p>
-									{/if}
-								</div>
-							</div>
+							<!-- ReviewByline is the shared core: who, what they gave, when, and
+							     the listing it was about. The public list renders the same
+							     component, so the byline cannot drift into two shapes. What is
+							     NOT shared is the arrangement around it — this page keeps its
+							     Card, its full-width body below, and the reply form.
+							     "(removed)" rather than the public "(no longer available)":
+							     this reader is the owner, and knows which of their own listings
+							     they took down (SP-12). -->
+							<ReviewByline {review} unavailableLabel="(removed)" />
 
 							{#if review.body}
 								<p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-ink">
