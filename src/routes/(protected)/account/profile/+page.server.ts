@@ -10,14 +10,32 @@ import {
 import type { Actions, PageServerLoad } from './$types';
 
 // Auth is guaranteed by the (protected) group layout.
+//
+// Two reads since the PII split: the public columns from `profiles`, the private
+// ones from `profiles_private` through the caller's OWN client — own-row RLS is
+// what authorizes it, so no service role and no security-definer function is
+// involved. `maybeSingle` because absence of a private row is a valid state (D3),
+// not an error: a user who signed up without a phone has never had one, and the
+// upsert below is what creates it the first time they save.
+//
+// The page keeps consuming one flat `profile` object, so the split stops here
+// rather than spreading into the markup.
 export const load: PageServerLoad = async ({ locals: { user, supabase } }) => {
-	const { data: profile } = await supabase
-		.from('profiles')
-		.select('full_name, phone, location, avatar_url, role')
-		.eq('id', user!.id)
-		.single();
+	const [{ data: profile }, { data: private_ }] = await Promise.all([
+		supabase.from('profiles').select('full_name, avatar_url, role').eq('id', user!.id).single(),
+		supabase.from('profiles_private').select('phone, location').eq('id', user!.id).maybeSingle()
+	]);
 
-	return { profile, email: user!.email };
+	return {
+		profile: profile
+			? {
+					...profile,
+					phone: private_?.phone ?? null,
+					location: private_?.location ?? null
+				}
+			: null,
+		email: user!.email
+	};
 };
 
 export const actions: Actions = {
@@ -42,19 +60,33 @@ export const actions: Actions = {
 		}
 
 		const { fullName, phone, location } = parsed.data;
-		const { error } = await supabase
-			.from('profiles')
-			.update({ full_name: fullName, phone, location: location || null })
-			.eq('id', user!.id);
 
-		if (error) {
-			// e.g. the phone unique constraint — surface a friendly message.
-			const message =
-				error.code === '23505'
-					? 'That phone number is already in use.'
-					: 'Could not save your changes. Please try again.';
-			return fail(400, { section: 'profile', formError: message });
-		}
+		// e.g. the phone unique constraint — surface a friendly message.
+		const saveFailed = (code?: string) =>
+			fail(400, {
+				section: 'profile',
+				formError:
+					code === '23505'
+						? 'That phone number is already in use.'
+						: 'Could not save your changes. Please try again.'
+			});
+
+		// Two writes since the PII split, public half first: if that fails there is
+		// no reason to touch the private row.
+		const { error: publicError } = await supabase
+			.from('profiles')
+			.update({ full_name: fullName })
+			.eq('id', user!.id);
+		if (publicError) return saveFailed(publicError.code);
+
+		// UPSERT (D7): one path for a user who has never had a private row and one
+		// who is editing an existing one. `id` is supplied explicitly because it is
+		// both the primary key and the RLS predicate — the own-row INSERT policy
+		// checks it, so a caller cannot upsert a row onto anyone else.
+		const { error: privateError } = await supabase
+			.from('profiles_private')
+			.upsert({ id: user!.id, phone, location: location || null }, { onConflict: 'id' });
+		if (privateError) return saveFailed(privateError.code);
 
 		return { section: 'profile', success: true };
 	},
