@@ -1,29 +1,55 @@
-name: Migrate hosted database
+# Filename kept as migrate.yml deliberately. GitHub only exposes a
+# workflow_dispatch workflow whose file exists on the DEFAULT branch, so
+# renaming the file would make it undispatchable from a feature branch until
+# it reached main — and the gate's verification depends on exactly that.
+name: Migrate and deploy
 
 on:
-  # Auto-run when migration files land on staging or main.
+  # Every push to a tier branch, not just migration-touching ones: `deploy`
+  # depends on `migrate`, so a job that only ran when supabase/migrations/**
+  # changed would leave most pushes with nothing to depend on. dev is included
+  # here — it previously required a manual dispatch, and that asymmetry is what
+  # let the 2026-08-08 incident happen.
   push:
-    branches: [staging, main]
-    paths:
-      - 'supabase/migrations/**'
-  # Manual trigger — used to bootstrap the hosted database the first time
-  # (when the migrations already exist on every branch, no push changes them),
-  # and to re-run on demand.
+    branches: [dev, staging, main]
   workflow_dispatch:
-
-# Never cancel an in-flight migration.
-concurrency:
-  group: migrate
-  cancel-in-progress: false
+    inputs:
+      simulate_migration_failure:
+        description: 'Fail migrate before any Supabase command, to prove the deploy gate holds. Verification only.'
+        type: boolean
+        default: false
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # THE CONTRACT: deploy is `needs: migrate`. A tier deploys only if that tier's
+  # migrations applied. Migration red → no deploy → the tier keeps old code and
+  # old schema together, which is coherent. The reverse — new code over old
+  # schema — is unreachable by construction.
+  # ---------------------------------------------------------------------------
   migrate:
     runs-on: ubuntu-latest
+    # Global and non-cancelling: ONE hosted Supabase project serves every tier,
+    # so `db push` runs must never interleave across branches, and an in-flight
+    # migration must never be cancelled part-applied. Contrast the deploy job,
+    # which is per-ref — deploys of different tiers are independent, and a
+    # superseded deploy of the SAME ref is worth cancelling.
+    concurrency:
+      group: migrate
+      cancel-in-progress: false
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
+      # First, before checkout and before any Supabase command: the artificial
+      # failure that proves the gate. Touches nothing.
+      - name: Simulated migration failure (verification only)
+        if: ${{ inputs.simulate_migration_failure }}
+        run: |
+          echo "simulate_migration_failure=true — failing the gate on purpose."
+          echo "No Supabase command has run; the database is untouched."
+          exit 1
+
       - uses: actions/checkout@v4
 
       - uses: supabase/setup-cli@v1
@@ -39,7 +65,7 @@ jobs:
           # A tool in the deploy path that upgrades itself is a hazard, not a
           # convenience: this workflow's behaviour must change only when someone
           # changes it. Upgrades are a deliberate commit — bump this, watch a run
-          # go green, keep it.
+          # go green, keep it. The same rule governs the Vercel CLI pin below.
           version: 2.111.0
 
       - name: Link the hosted project
@@ -47,3 +73,83 @@ jobs:
 
       - name: Push migrations (idempotent — applies only unseen migrations)
         run: supabase db push
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    # Per-ref, cancelling: see the asymmetry note on the migrate job above.
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # PINNED from birth, same rule as the Supabase CLI above.
+      VERCEL_CLI: vercel@58.9.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # main is the only production tier; every other ref is a preview. The
+      # production domain follows the newest production deployment on its own,
+      # so main needs no alias step — previews do (see the alias step).
+      - name: Resolve tier
+        id: tier
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            echo "environment=production" >> "$GITHUB_OUTPUT"
+            echo "prod_flag=--prod" >> "$GITHUB_OUTPUT"
+            echo "alias=" >> "$GITHUB_OUTPUT"
+          else
+            # Vercel's generated branch alias replaces '/' with '-'.
+            slug="$(echo "$GITHUB_REF_NAME" | tr '/' '-')"
+            echo "environment=preview" >> "$GITHUB_OUTPUT"
+            echo "prod_flag=" >> "$GITHUB_OUTPUT"
+            echo "alias=marketplace-git-${slug}-darh0mbus.vercel.app" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull Vercel environment
+        run: npx "$VERCEL_CLI" pull --yes --environment=${{ steps.tier.outputs.environment }} --token="$VERCEL_TOKEN"
+
+      - name: Build
+        run: npx "$VERCEL_CLI" build ${{ steps.tier.outputs.prod_flag }} --token="$VERCEL_TOKEN"
+
+      - name: Deploy
+        id: deploy
+        run: |
+          url="$(npx "$VERCEL_CLI" deploy --prebuilt ${{ steps.tier.outputs.prod_flag }} \
+            --token="$VERCEL_TOKEN" \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            --meta githubCommitRef="$GITHUB_REF_NAME")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
+
+      # Disabling the Git integration (vercel.json) also removes whatever branch
+      # aliasing it was doing. The stable dev/staging URLs are load-bearing —
+      # Supabase redirect allowlists and every bookmark point at them — so the
+      # alias is assigned explicitly rather than hoped for. Idempotent if the
+      # CLI already inherited it.
+      - name: Point the branch alias at this deployment
+        if: ${{ steps.tier.outputs.alias != '' }}
+        run: npx "$VERCEL_CLI" alias set "${{ steps.deploy.outputs.url }}" "${{ steps.tier.outputs.alias }}" --token="$VERCEL_TOKEN"
+
+      # One red or green workflow answers "did this tier ship?" without opening
+      # the Vercel dashboard.
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Ref | \`$GITHUB_REF_NAME\` |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Environment | ${{ steps.tier.outputs.environment }} |"
+            echo "| Deployment | ${{ steps.deploy.outputs.url }} |"
+            echo "| Alias | ${{ steps.tier.outputs.alias || 'production domain (automatic)' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
