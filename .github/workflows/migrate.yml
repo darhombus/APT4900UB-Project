@@ -113,21 +113,67 @@ jobs:
             echo "alias=marketplace-git-${slug}-darh0mbus.vercel.app" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Pull Vercel environment
-        run: npx "$VERCEL_CLI" pull --yes --environment=${{ steps.tier.outputs.environment }} --token="$VERCEL_TOKEN"
-
-      - name: Build
-        run: npx "$VERCEL_CLI" build ${{ steps.tier.outputs.prod_flag }} --token="$VERCEL_TOKEN"
-
+      # VERCEL BUILDS THIS, NOT US. The pull+build+`deploy --prebuilt` sequence
+      # that used to live here was removed on 2026-08-11, and the reason is worth
+      # keeping because the failure was invisible for weeks.
+      #
+      # `vercel pull` REFUSES to return env vars marked "Sensitive" — it writes
+      # the literal string `[SENSITIVE]` in their place. `vercel build` then read
+      # that file, so every sensitive secret was compiled into the bundle as the
+      # eleven characters `[SENSITIVE]`. Production ran with that value for
+      # SUPABASE_SERVICE_ROLE_KEY, PAYSTACK_SECRET_KEY, both Inngest keys,
+      # RESEND_API_KEY and AT_API_KEY: every admin query 401'd, no payment could
+      # be initialised, no job, email or SMS could run. Nothing failed loudly —
+      # the deploys were green, because a build cannot tell that a secret it
+      # baked in is a placeholder.
+      #
+      # Building on Vercel injects the real values at build time, so the flag is
+      # safe to use again and this class of bug cannot recur.
+      #
+      # THE MIGRATE GATE IS UNAFFECTED, which is the whole reason the Git
+      # integration is off (vercel.json) and deploys come from here: `needs:
+      # migrate` is what orders migration before deploy, not `--prebuilt`.
+      # Dropping the flag changes WHERE the build happens, not WHETHER the gate
+      # holds.
       - name: Deploy
         id: deploy
         run: |
-          url="$(npx "$VERCEL_CLI" deploy --prebuilt ${{ steps.tier.outputs.prod_flag }} \
+          url="$(npx "$VERCEL_CLI" deploy ${{ steps.tier.outputs.prod_flag }} \
             --token="$VERCEL_TOKEN" \
             --meta githubCommitSha="$GITHUB_SHA" \
             --meta githubCommitRef="$GITHUB_REF_NAME")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed: $url"
+
+      # Prove the deployment's SECRETS work, not just that it built.
+      #
+      # A green build says nothing about whether the credentials inside it are
+      # valid — that is exactly how production ran for hours on 2026-08-10 with a
+      # placeholder where the Supabase key should have been. /api/health makes one
+      # service-role read and 503s if it fails, so this step is the first thing in
+      # the pipeline that can actually catch a bad secret.
+      #
+      # Runs BEFORE the alias step deliberately: on dev and staging a broken build
+      # then never inherits the stable branch URL. On main there is no alias step
+      # (the production domain follows the newest deployment on its own), so this
+      # is detect-only there — a red run is the alert, not a prevention.
+      #
+      # Retries because a cold deployment can take a few seconds to serve.
+      - name: Smoke check — the deployment's secrets actually work
+        run: |
+          url="${{ steps.deploy.outputs.url }}/api/health"
+          for i in 1 2 3 4 5; do
+            code="$(curl -s -o /tmp/health.json -w '%{http_code}' "$url" || echo 000)"
+            if [ "$code" = "200" ]; then
+              echo "health OK ($url)"
+              exit 0
+            fi
+            echo "attempt $i: HTTP $code"
+            sleep 6
+          done
+          echo "::error::/api/health returned $code, not 200. This deployment cannot reach its database — check that no Vercel env var is marked Sensitive (vercel pull writes [SENSITIVE] in place of the value) and that SUPABASE_SERVICE_ROLE_KEY holds the sb_secret_ key."
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1
 
       # Disabling the Git integration (vercel.json) also removes whatever branch
       # aliasing it was doing. The stable dev/staging URLs are load-bearing —
