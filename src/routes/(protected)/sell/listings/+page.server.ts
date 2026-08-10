@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 	const { data: rows } = await supabase
 		.from('listings')
 		.select(
-			'id, title, price, status, created_at, condition, location_area, type, listing_images(storage_path, position)'
+			'id, title, price, status, created_at, condition, location_area, type, boosted_until, listing_images(storage_path, position)'
 		)
 		.eq('seller_id', user!.id)
 		.order('created_at', { ascending: false });
@@ -27,8 +27,15 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 		sold: all.filter((l) => l.status === 'sold').length
 	};
 
+	// One `now` for the whole page, so two rows can never disagree about whether
+	// the same instant has passed. Decided the same way the ranking term decides
+	// it — a boost whose window has closed reads as not boosted even if the
+	// expiry job has not tidied its row yet.
+	const now = Date.now();
+
 	const listings = all.map((l) => ({
 		id: l.id,
+		isBoosted: !!l.boosted_until && new Date(l.boosted_until).getTime() > now,
 		title: l.title,
 		price: l.price,
 		status: l.status,

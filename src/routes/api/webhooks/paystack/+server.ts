@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { getPaystackClient } from '$lib/server/paystack';
-import { inngest, paymentEventReceived } from '$lib/server/inngest';
+import { boostPaymentEventReceived, inngest, paymentEventReceived } from '$lib/server/inngest';
 import { handlePaystackWebhook } from '$lib/server/webhook';
 import type { RequestHandler } from './$types';
 
@@ -34,6 +34,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		sendPaymentEvent: async (input) => {
 			await inngest.send(paymentEventReceived.create(input));
+		},
+
+		// Boosts Section 3 (BST-14). A separate event, not a flag on the one above:
+		// the two settle different ledgers through different transition functions.
+		sendBoostPaymentEvent: async (input) => {
+			await inngest.send(boostPaymentEventReceived.create(input));
 		},
 
 		// Payouts Section 8. Wiring only — the decision logic lives in $lib/server/webhook

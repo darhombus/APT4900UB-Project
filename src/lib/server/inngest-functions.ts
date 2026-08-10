@@ -4,7 +4,10 @@ import { processPaymentReference } from '$lib/server/payment-processing';
 import { orderHoldDuration } from '$lib/server/runtime-env';
 import { autoCompleteDuration, WEEKLY_SWEEP_CRON } from '$lib/server/payout-constants';
 import { pendingWeeklyPayoutIds, runWeeklySweep } from '$lib/server/payout-sweep';
+import { expireBoost as expireBoostRow, processBoostReference } from '$lib/server/boosts';
 import {
+	boostActivated,
+	boostPaymentEventReceived,
 	inngest,
 	orderCreated,
 	orderPaid,
@@ -292,6 +295,73 @@ export const payoutInitiateTransfer = inngest.createFunction(
 		// (f) Note what is absent: nothing here sets 'success'. That transition is
 		// Section 8's, and only after a webhook AND a direct verify agree (P8).
 		return { payoutId, ...result };
+	}
+);
+
+/**
+ * Settle a boost charge off the request path (Boosts PRD — Section 3).
+ *
+ * The order-payment twin, deliberately kept as a SEPARATE function rather than a
+ * branch inside `process-payment-event`. BST-11's segregation is easier to hold
+ * when the two ledgers never share a code path, and the split means a boost
+ * cannot reach `finalize_order_payment` even by mistake.
+ *
+ * One step, for the same reason the order version has one: the seller's callback
+ * page runs the identical path, and splitting it across Inngest steps would force
+ * the callback to reimplement the sequence.
+ */
+export const processBoostPayment = inngest.createFunction(
+	{ id: 'process-boost-payment', retries: 3, triggers: [boostPaymentEventReceived] },
+	async ({ event, step }) => {
+		const { reference, eventType } = event.data;
+
+		const result = await step.run('verify-validate-activate', async () =>
+			processBoostReference(reference, {
+				paystack: getPaystackClient(),
+				admin: createSupabaseAdmin()
+			})
+		);
+
+		return { ...result, reference, eventType };
+	}
+);
+
+/**
+ * Close a boost's window when it runs out (Boosts PRD — Section 4; BST-9).
+ *
+ * `sleepUntil` a fixed instant, NOT `sleep` a duration — the difference matters.
+ * The row's `expires_at` is immutable for its lifetime (an extension creates a
+ * new row and supersedes this one, BST-5), so the target can never drift, and a
+ * deploy or a restart mid-sleep resumes against the same moment.
+ *
+ * IDEMPOTENCY KEY IS THE BOOST ID, NEVER THE LISTING ID. Keyed on the listing, an
+ * extension purchased inside the dedup window would be collapsed into the earlier
+ * run and NO job would own the new expiry — the listing would stay boosted past
+ * what was paid for. Per purchase is the only correct grain here, which is where
+ * this deviates from `auto-complete-order`'s per-order key.
+ *
+ * BST-10 needs nothing: a listing that died mid-boost expires normally against an
+ * already-hidden row.
+ */
+export const expireBoost = inngest.createFunction(
+	{
+		id: 'expire-boost',
+		retries: 3,
+		idempotency: 'event.data.boostId',
+		triggers: [boostActivated]
+	},
+	async ({ event, step }) => {
+		const { boostId, expiresAt } = event.data;
+
+		// Inngest suspends the run rather than holding a process open, so a 30-day
+		// sleep costs nothing while it waits and survives deploys in the middle.
+		await step.sleepUntil('boost-window', new Date(expiresAt));
+
+		const outcome = await step.run('expire', async () =>
+			expireBoostRow(createSupabaseAdmin(), boostId)
+		);
+
+		return { boostId, outcome };
 	}
 );
 

@@ -1,5 +1,6 @@
 import type { PaystackClient } from '$lib/server/paystack';
 import type { Json } from '$lib/types/database';
+import { isBoostReference } from '$lib/server/boost-decision';
 
 /**
  * Paystack webhook decision logic (Checkout PRD — Section 5), kept separate from
@@ -24,7 +25,10 @@ export type WebhookOutcome =
 	| 'transfer_applied'
 	| 'transfer_verify_mismatch'
 	| 'transfer_out_of_order'
-	| 'transfer_unmatched';
+	| 'transfer_unmatched'
+	// Boosts Section 3 (BST-14) — a charge in the `boost_` namespace, dispatched
+	// to the boost settlement function rather than the order one.
+	| 'boost_received';
 
 export interface WebhookAuditRow {
 	paystack_reference: string | null;
@@ -60,6 +64,12 @@ export interface WebhookDeps {
 	sendPaymentEvent(input: { reference: string; eventType: string }): Promise<void>;
 	/** Payouts Section 8. Absent → transfer events behave exactly as before. */
 	payouts?: TransferWebhookDeps;
+	/**
+	 * Boosts Section 3 (BST-14). Absent → a `boost_` charge falls through to the
+	 * order path exactly as it did before this phase, which is why every existing
+	 * charge test keeps passing untouched.
+	 */
+	sendBoostPaymentEvent?(input: { reference: string; eventType: string }): Promise<void>;
 }
 
 export interface WebhookResult {
@@ -130,6 +140,33 @@ export async function handlePaystackWebhook(
 	// which is what happened before this phase existed.
 	if (deps.payouts && TRANSFER_EVENTS.has(eventType)) {
 		return handleTransferEvent(eventType, reference, payload, deps, deps.payouts);
+	}
+
+	// Boosts Section 3 (BST-14) — the reference namespace decides which ledger a
+	// charge belongs to, and it decides BEFORE the order logic below.
+	//
+	// Why this branch has to exist at all: without it a boost charge would fall
+	// into the order path, where `processPaymentReference` looks the reference up
+	// in `orders`, finds nothing, and writes `ignored_unmatched`. Harmless to the
+	// payout ledger — that derives from orders and a boost has none — but the
+	// boost would never activate. The seller pays and gets nothing.
+	//
+	// Restricted to charge.success, exactly like the order path: charge.failed and
+	// everything else still records as `ignored_unhandled`, and a boost that fails
+	// is settled by the seller's callback page or by a later verify.
+	if (deps.sendBoostPaymentEvent && eventType === 'charge.success' && isBoostReference(reference)) {
+		await deps.recordAudit({
+			paystack_reference: reference,
+			event_type: eventType,
+			signature_valid: true,
+			payload,
+			processing_outcome: 'boost_received'
+		});
+		// Non-2xx on a dispatch failure, same reasoning as the order path: losing
+		// the event strands the purchase, and a retry is safe because settlement is
+		// idempotent by reference.
+		await deps.sendBoostPaymentEvent({ reference: reference!, eventType });
+		return { status: 200, outcome: 'boost_received', dispatched: true };
 	}
 
 	// Signature is good. Decide the single outcome BEFORE writing, so every

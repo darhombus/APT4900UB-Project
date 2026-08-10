@@ -79,6 +79,35 @@ export const payoutRequested = eventType('payout/requested', {
 	schema: staticSchema<{ payoutId: string }>()
 });
 
+/**
+ * A signature-valid Paystack webhook arrived carrying a `boost_` reference
+ * (Boosts PRD — Section 3; BST-14).
+ *
+ * A SEPARATE event from `checkout/payment.event.received`, not a flag on it.
+ * The two settle different ledgers through different transition functions, and
+ * routing them down one function would put the boost/order branch inside the
+ * processor — precisely the seam BST-11 wants kept visible. Identifiers only,
+ * for the same reason as the checkout event: the function re-verifies.
+ */
+export const boostPaymentEventReceived = eventType('boost/payment.event.received', {
+	schema: staticSchema<{ reference: string; eventType: string }>()
+});
+
+/**
+ * A boost was activated; starts the expiry countdown (Section 4; BST-9).
+ *
+ * Carries `expiresAt` so the function can `sleepUntil` a fixed instant rather
+ * than a duration. The value is immutable for the life of the row — an
+ * extension creates a NEW boost and supersedes this one (BST-5) rather than
+ * moving this window — so the sleep target can never go stale.
+ *
+ * MAY fire more than once for one boost: the webhook and the callback can both
+ * settle the same reference. The consumer keys idempotency on boostId.
+ */
+export const boostActivated = eventType('boost/activated', {
+	schema: staticSchema<{ boostId: string; expiresAt: string }>()
+});
+
 export const inngest = new Inngest({
 	id: 'mysoko',
 	/**
