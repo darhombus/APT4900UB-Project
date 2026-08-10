@@ -2,7 +2,9 @@ import { serve } from 'inngest/sveltekit';
 import { inngest } from '$lib/server/inngest';
 import {
 	autoCompleteOrder,
+	expireBoost,
 	expireOrder,
+	processBoostPayment,
 	processPaymentEvent,
 	payoutInitiateTransfer,
 	payoutWeeklySweep
@@ -32,6 +34,8 @@ export const { GET, POST, PUT } = serve({
 		expireOrder,
 		autoCompleteOrder,
 		payoutInitiateTransfer,
-		payoutWeeklySweep
+		payoutWeeklySweep,
+		processBoostPayment,
+		expireBoost
 	]
 });
