@@ -5,6 +5,7 @@ import {
 	isPaystackMockEnabled,
 	PAYSTACK_CURRENCY
 } from '$lib/server/paystack';
+import { expectedMinorUnits, isBoostReference } from '$lib/server/boost-decision';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -27,6 +28,14 @@ function requireMockMode() {
 	if (!isPaystackMockEnabled()) error(404, 'Not found');
 }
 
+/**
+ * Where the mock sends the payer afterwards. The two flows have separate
+ * callback pages because they settle separate ledgers (BST-14), so the mock has
+ * to branch the same way the webhook does — on the reference namespace.
+ */
+const callbackFor = (reference: string) =>
+	isBoostReference(reference) ? '/sell/boosts/callback' : '/checkout/callback';
+
 export const load: PageServerLoad = async ({ url }) => {
 	requireMockMode();
 
@@ -35,6 +44,28 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	// Service-role: this page runs outside any session and only ever exists locally.
 	const admin = createSupabaseAdmin();
+
+	// Boosts (BST-14). Amount is derived the same way the real purchase derives
+	// it — the snapshot in whole shillings, times 100 — so a mock payment that
+	// disagreed with `decideBoost` would show up here as an amount mismatch rather
+	// than being papered over.
+	if (isBoostReference(reference)) {
+		const { data: boost } = await admin
+			.from('boosts')
+			.select('id, status, price_kes_charged, duration_days, listings(title)')
+			.eq('paystack_reference', reference)
+			.maybeSingle();
+
+		if (!boost) error(404, 'No boost for that reference');
+
+		return {
+			reference,
+			amountCents: expectedMinorUnits(boost.price_kes_charged),
+			status: boost.status,
+			listingTitle: `${boost.duration_days}-day boost — ${boost.listings?.title ?? 'Listing'}`
+		};
+	}
+
 	const { data: order } = await admin
 		.from('orders')
 		.select('id, amount_total, status, listings(title)')
@@ -103,7 +134,7 @@ export const actions: Actions = {
 		getMockPaystackClient().seedVerify(reference, { status: 'success', amountCents });
 		await deliverWebhook(fetch, url.origin, 'charge.success', reference, amountCents);
 
-		redirect(303, `/checkout/callback?reference=${encodeURIComponent(reference)}`);
+		redirect(303, `${callbackFor(reference)}?reference=${encodeURIComponent(reference)}`);
 	},
 
 	failure: async ({ url, fetch, request }) => {
@@ -117,6 +148,6 @@ export const actions: Actions = {
 		getMockPaystackClient().seedVerify(reference, { status: 'failed', amountCents });
 		await deliverWebhook(fetch, url.origin, 'charge.failed', reference, amountCents);
 
-		redirect(303, `/checkout/callback?reference=${encodeURIComponent(reference)}`);
+		redirect(303, `${callbackFor(reference)}?reference=${encodeURIComponent(reference)}`);
 	}
 };

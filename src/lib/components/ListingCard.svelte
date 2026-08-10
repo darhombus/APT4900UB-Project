@@ -35,11 +35,16 @@
 				<circle cx="100" cy="100" r="44" stroke="currentColor" stroke-width="4" />
 				<circle cx="100" cy="100" r="64" stroke="currentColor" stroke-width="4" />
 			</svg>
-			<span
-				class="relative block truncate text-[11px] font-semibold tracking-wide text-brand-strong uppercase"
-			>
-				{listing.categoryLabel ?? 'Service'}
-			</span>
+			<div class="relative flex items-start justify-between gap-2">
+				<span
+					class="block truncate text-[11px] font-semibold tracking-wide text-brand-strong uppercase"
+				>
+					{listing.categoryLabel ?? 'Service'}
+				</span>
+				{#if listing.isFeatured}
+					<span class="flex-none"><Badge variant="featured">Featured</Badge></span>
+				{/if}
+			</div>
 			<h3 class="relative line-clamp-3 font-display text-base leading-snug font-semibold text-ink">
 				{listing.title}
 			</h3>
@@ -63,6 +68,13 @@
 			{#if condition}
 				<span class="absolute top-2 left-2">
 					<Badge variant={listing.condition === 'new' ? 'accent' : 'neutral'}>{condition}</Badge>
+				</span>
+			{/if}
+			<!-- Opposite corner from the condition badge, so the two never collide on a
+			     new + boosted listing — the one case where both are present. -->
+			{#if listing.isFeatured}
+				<span class="absolute top-2 right-2">
+					<Badge variant="featured">Featured</Badge>
 				</span>
 			{/if}
 		</div>

@@ -59,8 +59,13 @@ async function emitOrderPaid(input: { orderId: string }): Promise<void> {
  * Returns null when Paystack positively tells us the reference is not
  * verifiable (a business-terminal answer). Re-throws anything else — bad key,
  * rate limit, outage, network — so Inngest retries it.
+ *
+ * EXPORTED for the boosts flow (Boosts PRD — Section 3), which must classify a
+ * Paystack failure identically: two payment paths that disagree about which
+ * errors are retryable would retry different things under the same outage.
+ * Shared rather than reimplemented for the same reason `decidePayment` is.
  */
-async function verifyOrThrow(
+export async function verifyTransactionOrThrow(
 	paystack: ProcessDeps['paystack'],
 	reference: string
 ): Promise<VerifyResult | null> {
@@ -114,7 +119,7 @@ export async function processPaymentReference(
 ): Promise<ProcessResult> {
 	const { paystack, admin } = deps;
 
-	const verify = await verifyOrThrow(paystack, reference);
+	const verify = await verifyTransactionOrThrow(paystack, reference);
 
 	// Load the order by OUR reference (D10's idempotency key).
 	const { data: order, error: orderError } = await admin

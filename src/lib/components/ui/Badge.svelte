@@ -9,6 +9,7 @@
 		| 'neutral'
 		| 'brand'
 		| 'accent'
+		| 'featured'
 		| 'success'
 		| 'warning'
 		| 'error'
@@ -31,6 +32,13 @@
 		neutral: 'bg-neutral-tint text-neutral-strong',
 		brand: 'bg-brand-tint text-brand-strong',
 		accent: 'bg-accent-tint text-accent-strong',
+		// Paid placement disclosure (Boosts BST-6). The ONLY solid-fill badge in the
+		// set, and deliberately so: it sits beside a `New` condition badge that is
+		// already amber tint, and two tints of one hue would read as the same thing
+		// said twice. Solid --color-accent is a token the theme already defines for
+		// exactly this ("ATTENTION ONLY (new / featured)") and no badge had used yet,
+		// so it is one step louder without introducing a colour.
+		featured: 'bg-accent text-ink',
 		success: 'bg-success-tint text-success-strong',
 		warning: 'bg-warning-tint text-warning-strong',
 		error: 'bg-error-tint text-error-strong',
