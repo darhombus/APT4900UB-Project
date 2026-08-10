@@ -215,13 +215,15 @@ function isInvalidTransition(message: string | undefined): boolean {
 	return !!message && message.includes('invalid_boost_transition');
 }
 
-/** Why an expiry attempt did nothing. Both no-ops are normal, neither is an error. */
+/** Why an expiry attempt did nothing. None of these no-ops is an error. */
 export type ExpireOutcome =
 	| 'expired'
 	/** The row was already terminal — a newer purchase superseded it (BST-5). */
 	| 'noop_superseded'
 	/** The window has not closed yet; the guard refused to un-boost early (BST-9). */
-	| 'noop_not_due';
+	| 'noop_not_due'
+	/** The row is gone. Surprising, but nothing to retry towards — see below. */
+	| 'unknown_boost';
 
 /**
  * Close one boost's window (Section 4.2).
@@ -248,6 +250,24 @@ export async function expireBoost(admin: DB, boostId: string): Promise<ExpireOut
 	if (!error) return 'expired';
 	if (isInvalidTransition(error.message)) return 'noop_superseded';
 	if (error.message.includes('boost_not_yet_expired')) return 'noop_not_due';
+
+	// The row is gone — deleted by an operator clearing test data, or by the e2e
+	// teardown. LOUD BUT TERMINAL, exactly as payoutInitiateTransfer treats an
+	// event for a payout it cannot find: retrying cannot bring the row back, so
+	// throwing here would burn three attempts and leave a failed run in the
+	// dashboard for something whose answer is already final. The console.error is
+	// what makes it visible; the clean return is what stops it being noise.
+	//
+	// This path became reachable the first time production boost rows were
+	// deleted (2026-08-11). Before that it was theoretical, and throwing looked
+	// like the conservative choice.
+	if (error.message.includes('boost_not_found')) {
+		console.error(
+			'[boosts] expiry woke for boost %s, which no longer exists — nothing to expire',
+			boostId
+		);
+		return 'unknown_boost';
+	}
 
 	// Anything else is infrastructure — throw so Inngest retries.
 	throw new Error(`transition_boost_status(expired) failed: ${error.message}`);
