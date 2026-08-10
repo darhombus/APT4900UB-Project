@@ -34,6 +34,100 @@ export type Database = {
   }
   public: {
     Tables: {
+      boost_packages: {
+        Row: {
+          active: boolean
+          created_at: string
+          duration_days: number
+          id: string
+          price_kes: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          duration_days: number
+          id?: string
+          price_kes: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          duration_days?: number
+          id?: string
+          price_kes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      boosts: {
+        Row: {
+          created_at: string
+          duration_days: number
+          expires_at: string | null
+          id: string
+          listing_id: string
+          package_id: string
+          paystack_reference: string
+          price_kes_charged: number
+          seller_id: string
+          starts_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          duration_days: number
+          expires_at?: string | null
+          id?: string
+          listing_id: string
+          package_id: string
+          paystack_reference: string
+          price_kes_charged: number
+          seller_id: string
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          duration_days?: number
+          expires_at?: string | null
+          id?: string
+          listing_id?: string
+          package_id?: string
+          paystack_reference?: string
+          price_kes_charged?: number
+          seller_id?: string
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boosts_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boosts_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "boost_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boosts_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -158,6 +252,7 @@ export type Database = {
       }
       listings: {
         Row: {
+          boosted_until: string | null
           category_id: string
           city: string
           condition: Database["public"]["Enums"]["item_condition"] | null
@@ -179,6 +274,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          boosted_until?: string | null
           category_id: string
           city?: string
           condition?: Database["public"]["Enums"]["item_condition"] | null
@@ -200,6 +296,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          boosted_until?: string | null
           category_id?: string
           city?: string
           condition?: Database["public"]["Enums"]["item_condition"] | null
@@ -755,6 +852,7 @@ export type Database = {
           sort?: string
         }
         Returns: {
+          boosted_until: string | null
           category_id: string
           city: string
           condition: Database["public"]["Enums"]["item_condition"] | null
@@ -812,6 +910,29 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      transition_boost_status: {
+        Args: { p_boost_id: string; p_new_status: string }
+        Returns: {
+          created_at: string
+          duration_days: number
+          expires_at: string | null
+          id: string
+          listing_id: string
+          package_id: string
+          paystack_reference: string
+          price_kes_charged: number
+          seller_id: string
+          starts_at: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "boosts"
           isOneToOne: true
           isSetofReturn: false
         }
