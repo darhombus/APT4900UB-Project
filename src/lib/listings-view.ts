@@ -49,6 +49,17 @@ export interface ListingCardData {
 	 */
 	ratingAverage: number | null;
 	reviewCount: number;
+	/**
+	 * Whether to disclose paid placement on this card (Boosts PRD — BST-6).
+	 *
+	 * DISCLOSURE, not decoration, and deliberately not simply "is this listing
+	 * boosted". BST-6 requires a badge on every ELEVATED placement; a surface that
+	 * does not elevate must not claim one, or the badge stops meaning anything.
+	 * Only the search executor sets this, because search and category browse are
+	 * the only surfaces the boost term reaches this phase — the homepage strip is
+	 * deferred (BST-8) and its cards correctly show no badge.
+	 */
+	isFeatured: boolean;
 }
 
 type CardListing = {
@@ -67,6 +78,12 @@ type CardListing = {
 	/** Aggregates maintained by the review triggers; absent on older callers. */
 	review_count?: number | null;
 	rating_sum?: number | null;
+	/**
+	 * Trigger-maintained effective boost window. Passed ONLY by callers whose
+	 * surface actually elevates boosted listings — see `isFeatured` on the card
+	 * data. Absent everywhere else, which is why every other caller is unchanged.
+	 */
+	boosted_until?: string | null;
 };
 
 /** Map a listings row (with its embedded images) to the card view-model. */
@@ -90,6 +107,14 @@ export function toCardData(
 			reviewCount: listing.review_count ?? 0,
 			ratingSum: listing.rating_sum ?? 0
 		}),
-		reviewCount: listing.review_count ?? 0
+		reviewCount: listing.review_count ?? 0,
+		// Same instant the SQL ranking term uses (`boosted_until > now()`), so the
+		// badge and the elevation can never disagree: a listing that just missed the
+		// cut-off sorts unboosted AND renders unbadged. `now` is threaded through
+		// from the caller for the same reason `postedLabel` is — SSR and hydration
+		// must compute the identical value.
+		isFeatured: listing.boosted_until
+			? new Date(listing.boosted_until).getTime() > (now ?? Date.now())
+			: false
 	};
 }

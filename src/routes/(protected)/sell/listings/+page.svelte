@@ -88,6 +88,18 @@
 	<Badge variant={status}><span class="capitalize">{status}</span></Badge>
 {/snippet}
 
+<!-- Status, plus the boost state when one is running. Two badges rather than a
+     'boosted' status: a boost is orthogonal to the listing lifecycle, and folding
+     it into the status enum would lose whether the listing is active underneath. -->
+{#snippet rowBadges(l: (typeof data.listings)[number])}
+	<div class="flex flex-wrap items-center justify-end gap-1.5">
+		{@render statusBadge(l.status)}
+		{#if l.isBoosted}
+			<Badge variant="featured">Featured</Badge>
+		{/if}
+	</div>
+{/snippet}
+
 {#snippet thumb(l: (typeof data.listings)[number], size: string)}
 	{#if l.isService && !l.hasImage}
 		<!-- Photo-less service: a service glyph tile, never the placeholder-image icon. -->
@@ -124,6 +136,13 @@
 		</form>
 		<Button href={`/sell/listings/${l.id}/edit`} size="sm" variant="secondary">Edit</Button>
 	{:else if l.status === 'active'}
+		<!-- Only an active listing can be boosted (BST-4), so the entry point exists
+		     only here. `Extend` rather than `Boost` when one is already running —
+		     buying again adds days rather than starting a second boost (BST-5), and
+		     the label should say which of those is about to happen. -->
+		<Button href={`/sell/listings/${l.id}/boost`} size="sm" variant="secondary">
+			{l.isBoosted ? 'Extend boost' : 'Boost'}
+		</Button>
 		<form method="POST" action="?/markSold" use:enhance={act('markSold', l.id)}>
 			<input type="hidden" name="id" value={l.id} />
 			<Button
@@ -297,7 +316,7 @@
 									</div>
 								</td>
 								<td class="px-4 py-3 text-right"><Price amount={l.price} /></td>
-								<td class="px-4 py-3">{@render statusBadge(l.status)}</td>
+								<td class="px-4 py-3">{@render rowBadges(l)}</td>
 								<td class="px-4 py-3 whitespace-nowrap text-subtle">{fmtDate(l.created_at)}</td>
 								<td class="px-4 py-3">
 									<div class="flex flex-wrap justify-end gap-2">{@render rowActions(l)}</div>
@@ -319,7 +338,7 @@
 									<a href={`/sell/listings/${l.id}/edit`} class="truncate font-medium text-ink">
 										{l.title}
 									</a>
-									{@render statusBadge(l.status)}
+									{@render rowBadges(l)}
 								</div>
 								<div class="mt-0.5"><Price amount={l.price} /></div>
 								<p class="mt-0.5 text-xs text-subtle">

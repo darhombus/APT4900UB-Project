@@ -85,6 +85,12 @@ export async function runSearch(
 			// aggregates arrive with the row — no extra select, no per-card query.
 			review_count: r.review_count,
 			rating_sum: r.rating_sum,
+			// Boosts BST-6. Same free ride as the review aggregates: the column is on
+			// `listings`, so it comes back with the row and the badge costs nothing.
+			// Passed HERE and nowhere else — search and category browse are the only
+			// surfaces the boost ordering term reaches, so they are the only ones
+			// entitled to disclose paid placement.
+			boosted_until: r.boosted_until,
 			listing_images: imagesByListing.get(r.id) ?? []
 		})
 	);
