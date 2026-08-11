@@ -15,6 +15,8 @@
 		profile: { full_name: string; avatar_url: string | null } | null;
 		/** Unread-conversation count for the Messages badge (capped display at 9+). */
 		unreadCount?: number;
+		/** Unread-notification count for the Notifications badge (same cap). */
+		notificationCount?: number;
 	}
 
 	let {
@@ -24,10 +26,12 @@
 		loggedIn,
 		isSeller = false,
 		profile,
-		unreadCount = 0
+		unreadCount = 0,
+		notificationCount = 0
 	}: Props = $props();
 
 	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
+	const notificationLabel = $derived(notificationCount > 9 ? '9+' : String(notificationCount));
 
 	let panelEl = $state<HTMLDivElement | null>(null);
 	let closeButtonEl = $state<HTMLButtonElement | null>(null);
@@ -225,6 +229,24 @@
 									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
 								>
 									{unreadLabel}
+								</span>
+							{/if}
+						</a>
+						<a
+							href="/notifications"
+							class={navItem}
+							onclick={onclose}
+							aria-label={notificationCount > 0
+								? `Notifications, ${notificationLabel} unread`
+								: 'Notifications'}
+						>
+							<span>Notifications</span>
+							{#if notificationCount > 0}
+								<span
+									aria-hidden="true"
+									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+								>
+									{notificationLabel}
 								</span>
 							{/if}
 						</a>

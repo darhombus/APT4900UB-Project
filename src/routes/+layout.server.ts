@@ -1,5 +1,6 @@
 import { loadCategoryTree } from '$lib/server/categories';
 import { unreadConversationCount } from '$lib/server/messaging';
+import { unreadNotificationCount } from '$lib/server/notifications';
 import type { LayoutServerLoad } from './$types';
 
 /**
@@ -25,6 +26,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 	let profile: { full_name: string; avatar_url: string | null } | null = null;
 	let isSeller = false;
 	let unreadCount = 0;
+	let notificationCount = 0;
 	if (session && user) {
 		// Header essentials + the unread-conversation count for the badge, in parallel.
 		// Computed server-side like the rest of the session-dependent UI, so SSR and
@@ -34,9 +36,12 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 		// profile fetch, so a throw here would otherwise reject the whole layout load
 		// and take down every page. Catch it to 0 — a non-critical badge must never be
 		// able to crash the shell (worst case the badge is briefly absent).
-		const [{ data }, unread] = await Promise.all([
+		const [{ data }, unread, notifications] = await Promise.all([
 			supabase.from('profiles').select('full_name, avatar_url, role').eq('id', user.id).single(),
-			unreadConversationCount(supabase, user.id).catch(() => 0)
+			unreadConversationCount(supabase, user.id).catch(() => 0),
+			// Same best-effort contract as the conversation count above, and for the
+			// same reason: a bell badge must never be able to take down the shell.
+			unreadNotificationCount(supabase).catch(() => 0)
 		]);
 		if (data) {
 			profile = { full_name: data.full_name, avatar_url: data.avatar_url };
@@ -46,6 +51,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 			locals.roleCache = Promise.resolve(data.role);
 		}
 		unreadCount = unread;
+		notificationCount = notifications;
 	}
 
 	return {
@@ -57,6 +63,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 		profile,
 		isSeller,
 		unreadCount,
+		notificationCount,
 		categoryTree: await categoriesPromise,
 		cookies: cookies.getAll()
 	};

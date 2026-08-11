@@ -23,7 +23,11 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals: { user, supabase } }) => {
 	const [{ data: profile }, { data: private_ }] = await Promise.all([
 		supabase.from('profiles').select('full_name, avatar_url, role').eq('id', user!.id).single(),
-		supabase.from('profiles_private').select('phone, location').eq('id', user!.id).maybeSingle()
+		supabase
+			.from('profiles_private')
+			.select('phone, location, email_activity')
+			.eq('id', user!.id)
+			.maybeSingle()
 	]);
 
 	return {
@@ -34,6 +38,10 @@ export const load: PageServerLoad = async ({ locals: { user, supabase } }) => {
 					location: private_?.location ?? null
 				}
 			: null,
+		// NTF-4 corollary: no private row means the toggle is ON. The absent row is
+		// a valid state (PII D3), not a missing one to repair, so the default is
+		// applied here rather than by inserting a row for everyone.
+		emailActivity: private_?.email_activity ?? true,
 		email: user!.email
 	};
 };
@@ -89,6 +97,36 @@ export const actions: Actions = {
 		if (privateError) return saveFailed(privateError.code);
 
 		return { section: 'profile', success: true };
+	},
+
+	/**
+	 * The NTF-4 email toggle. Its own action, not a field on updateProfile: it is
+	 * a single switch that should save the moment it is flipped, and folding it
+	 * into the profile form would mean flipping it did nothing until the user
+	 * remembered to press Save.
+	 *
+	 * UPSERT for the same reason the profile save uses one — a user who has never
+	 * saved a phone has no private row, and turning activity email off must not
+	 * require them to have one first. `email_activity` is in both column
+	 * allowlists (NTF-16), so this is the whole of what the write may touch.
+	 */
+	updateEmailActivity: async ({ request, locals: { user, supabase } }) => {
+		const form = await request.formData();
+		// An unchecked checkbox sends nothing at all, which is the "off" signal.
+		const emailActivity = form.get('emailActivity') === 'on';
+
+		const { error } = await supabase
+			.from('profiles_private')
+			.upsert({ id: user!.id, email_activity: emailActivity }, { onConflict: 'id' });
+
+		if (error) {
+			return fail(400, {
+				section: 'notifications',
+				formError: 'Could not save that preference. Please try again.'
+			});
+		}
+
+		return { section: 'notifications', success: true, emailActivity };
 	},
 
 	// ── Avatar upload: <uid>/avatar.<ext> with upsert, store the public URL ──────

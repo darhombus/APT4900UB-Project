@@ -16,6 +16,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { unreadCount as unreadCountStore } from '$lib/unread-count.svelte';
+	import { notificationCount as notificationCountStore } from '$lib/notification-count.svelte';
 
 	let { data, children } = $props();
 	let { session, supabase } = $derived(data);
@@ -34,6 +35,15 @@
 	});
 	const unreadCount = $derived(unreadCountStore.value);
 	const unreadLabel = $derived(unreadCount > 9 ? '9+' : String(unreadCount));
+
+	// Unread-NOTIFICATION badge (NTF-10, NTF-18), seeded and kept live by exactly
+	// the same mechanism as the conversation badge above — separate store,
+	// separate channel, separate endpoint. Capped at 9+ identically.
+	$effect(() => {
+		notificationCountStore.set(data.notificationCount ?? 0);
+	});
+	const notificationCount = $derived(notificationCountStore.value);
+	const notificationLabel = $derived(notificationCount > 9 ? '9+' : String(notificationCount));
 
 	// Stable identity + token (both strings) so the live-badge subscription below
 	// re-subscribes only on login/logout/token-refresh — not on every invalidate.
@@ -195,6 +205,54 @@
 		};
 	});
 
+	// ── Live notification badge (NTF-10) ────────────────────────────────────────
+	// The bell's twin of the subscription above. RLS scopes the stream: Realtime
+	// evaluates notifications_select per subscriber against their JWT, so an
+	// unfiltered INSERT subscription delivers only the user's own rows — there is
+	// no sender to compare against here, because every row that arrives is by
+	// definition for this user. Coalesced for the same reason: a burst of events
+	// (an order completing notifies both parties) must not thrash the endpoint.
+	$effect(() => {
+		const uid = userId;
+		const token = accessToken;
+		if (!uid || !supabase) return;
+		const client = supabase;
+		void client.realtime.setAuth(token);
+
+		let pending: ReturnType<typeof setTimeout> | null = null;
+		const refresh = () => {
+			if (pending) return;
+			pending = setTimeout(() => {
+				pending = null;
+				fetch('/api/notification-count')
+					.then((r) => r.json())
+					.then(({ count }) => notificationCountStore.set(count))
+					.catch(() => {});
+			}, 250);
+		};
+
+		const channel = client
+			.channel('user-notifications')
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () =>
+				refresh()
+			)
+			// Refresh once the channel is actually joined, which closes the gap
+			// between this page rendering its SSR count and the subscription being
+			// live: anything inserted during the join is never delivered to us, and
+			// without this the badge would stay stale until the next navigation.
+			// A deliberate (small) improvement on the messages twin, which has the
+			// same gap — it also makes the e2e spec deterministic instead of racing
+			// the join.
+			.subscribe((status) => {
+				if (status === 'SUBSCRIBED') refresh();
+			});
+
+		return () => {
+			if (pending) clearTimeout(pending);
+			client.removeChannel(channel);
+		};
+	});
+
 	/**
 	 * Keep server load functions in sync with client-side auth changes. When the
 	 * user logs in or out (here or in another tab), Supabase fires onAuthStateChange;
@@ -308,6 +366,43 @@
 									New listing
 								</a>
 							{/if}
+							<!-- The bell sits BESIDE the account menu, not inside it (NTF-18):
+							     two distinct icons, so a glance tells the two counts apart.
+							     Notifications are a place you go, not a menu you open, so it is
+							     a plain link to the inbox rather than a dropdown. -->
+							<a
+								href="/notifications"
+								data-testid="header-bell"
+								aria-label={notificationCount > 0
+									? `Notifications, ${notificationLabel} unread`
+									: 'Notifications'}
+								class="relative flex h-10 w-10 items-center justify-center rounded-control transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
+							>
+								<svg class="h-5 w-5 text-white" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+									<path
+										d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 2.6-.6 4.1-1.1 4.9a.6.6 0 0 0 .5.9h10.2a.6.6 0 0 0 .5-.9c-.5-.8-1.1-2.3-1.1-4.9A4.5 4.5 0 0 0 10 3Z"
+										stroke="currentColor"
+										stroke-width="1.6"
+										stroke-linejoin="round"
+									/>
+									<path
+										d="M8.3 16a1.8 1.8 0 0 0 3.4 0"
+										stroke="currentColor"
+										stroke-width="1.6"
+										stroke-linecap="round"
+									/>
+								</svg>
+								{#if notificationCount > 0}
+									<!-- Glanceable count; the link's aria-label carries it for AT. -->
+									<span
+										data-testid="header-notification-badge"
+										aria-hidden="true"
+										class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1 text-[10px] font-bold text-white ring-2 ring-brand-strong"
+									>
+										{notificationLabel}
+									</span>
+								{/if}
+							</a>
 							<details use:autoClose class="group relative">
 								<summary
 									aria-label="Account menu"
@@ -438,6 +533,7 @@
 			{isSeller}
 			{profile}
 			{unreadCount}
+			{notificationCount}
 		/>
 	{/if}
 

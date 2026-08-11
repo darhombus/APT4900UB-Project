@@ -40,6 +40,22 @@
 			await update();
 			outcome(result, 'Profile saved');
 		};
+	// The switch shows the server's value, overridden by an in-flight change so it
+	// does not snap back mid-round-trip. Clearing `pending` after `update()` hands
+	// authority back to the server rather than leaving a local copy to drift.
+	let pending = $state<boolean | null>(null);
+	const emailActivity = $derived(pending ?? data.emailActivity);
+
+	const onEmailActivity: SubmitFunction = ({ formData }) => {
+		const next = formData.get('emailActivity') === 'on';
+		pending = next;
+		return async ({ result, update }) => {
+			await update();
+			pending = null;
+			outcome(result, next ? 'Activity emails are on' : 'Activity emails are off');
+		};
+	};
+
 	// A change-password failure is usually a stale session — a warning, not an error.
 	const onPassword: SubmitFunction =
 		() =>
@@ -184,6 +200,47 @@
 			</div>
 
 			<Button type="submit">Save changes</Button>
+		</form>
+	</Card>
+
+	<!-- ── Email notifications (NTF-4) ─────────────────────────────────────── -->
+	<Card>
+		<h2 class="text-lg font-semibold text-ink">Email</h2>
+
+		<form
+			method="POST"
+			action="?/updateEmailActivity"
+			use:enhance={onEmailActivity}
+			class="mt-4 flex items-start justify-between gap-6"
+		>
+			<div class="min-w-0">
+				<Label for="emailActivity" class="text-ink">Activity emails</Label>
+				<p class="mt-1 text-sm text-muted">
+					Get an email when you receive a review, when a seller replies to yours, and when an order
+					or a boost needs your attention.
+				</p>
+				<!-- Says plainly what the switch does NOT cover, because the alternative
+				     is a user turning it off and then being surprised by a receipt. -->
+				<p class="mt-2 text-xs text-subtle">
+					Receipts for payments, payouts and boosts are always sent.
+				</p>
+			</div>
+
+			<!-- Submits on change: a lone switch that needed a Save button beside it
+			     would leave people believing they had changed something when they
+			     had not. -->
+			<input
+				id="emailActivity"
+				name="emailActivity"
+				type="checkbox"
+				data-testid="email-activity-toggle"
+				checked={emailActivity}
+				onchange={(e) => e.currentTarget.form?.requestSubmit()}
+				class="mt-1 h-5 w-5 flex-none cursor-pointer rounded-control border-border text-brand accent-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+			/>
+			<noscript>
+				<Button type="submit" variant="secondary" size="sm">Save</Button>
+			</noscript>
 		</form>
 	</Card>
 
