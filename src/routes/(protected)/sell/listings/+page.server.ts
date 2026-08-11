@@ -19,23 +19,33 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 		.order('created_at', { ascending: false });
 	const all = rows ?? [];
 
+	// One `now` for the whole page, so two rows can never disagree about whether
+	// the same instant has passed, and the tab count can never disagree with the
+	// rows it counts. Decided the same way the ranking term decides it — a boost
+	// whose window has closed reads as not boosted even if the expiry job has not
+	// tidied its row yet.
+	const now = Date.now();
+	const boosted = (l: (typeof all)[number]) =>
+		!!l.boosted_until && new Date(l.boosted_until).getTime() > now;
+
 	const counts = {
 		all: all.length,
 		draft: all.filter((l) => l.status === 'draft').length,
 		active: all.filter((l) => l.status === 'active').length,
 		paused: all.filter((l) => l.status === 'paused').length,
-		sold: all.filter((l) => l.status === 'sold').length
+		sold: all.filter((l) => l.status === 'sold').length,
+		// Not a status — an attribute, and always a subset of `active`. The tab row
+		// is already a set of views rather than a strict lifecycle ("All" is not a
+		// status either), so this sits in it without lying about anything.
+		boosted: all.filter(boosted).length
 	};
-
-	// One `now` for the whole page, so two rows can never disagree about whether
-	// the same instant has passed. Decided the same way the ranking term decides
-	// it — a boost whose window has closed reads as not boosted even if the
-	// expiry job has not tidied its row yet.
-	const now = Date.now();
 
 	const listings = all.map((l) => ({
 		id: l.id,
-		isBoosted: !!l.boosted_until && new Date(l.boosted_until).getTime() > now,
+		isBoosted: boosted(l),
+		// The raw window, for the row to render. Sent only when live: an expired
+		// date on screen is worse than none, and `isBoosted` already gates display.
+		boostedUntil: boosted(l) ? l.boosted_until : null,
 		title: l.title,
 		price: l.price,
 		status: l.status,
