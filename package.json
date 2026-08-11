@@ -47,6 +47,7 @@
 		"@supabase/ssr": "^0.12.0",
 		"@supabase/supabase-js": "^2.110.2",
 		"inngest": "^4.13.0",
+		"resend": "^6.19.0",
 		"zod": "^4.4.3"
 	}
 }
