@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { applyAction } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Button, Card } from '$lib/components/ui';
 	import { notificationCount as notificationCountStore } from '$lib/notification-count.svelte';
@@ -30,16 +29,24 @@
 		if (submitter?.dataset.unread === 'true') {
 			notificationCountStore.set(notificationCountStore.value - 1);
 		}
-		return async ({ result }) => {
-			await applyAction(result);
+		return async ({ update }) => {
+			// The action redirects to the notification's source, which update()
+			// follows. On the fallback path — a row that vanished, or a type this
+			// build does not know — it re-runs the load instead, so the row restyles
+			// to read rather than sitting there still looking unopened.
+			await update();
 		};
 	};
 
 	const onMarkAll: SubmitFunction = () => {
 		notificationCountStore.set(0);
-		return async ({ result }) => {
-			// `success` makes applyAction re-run the load, so the rows restyle to read.
-			await applyAction(result);
+		return async ({ update }) => {
+			// `update()`, NOT `applyAction()`. Only update() invalidates and re-runs
+			// the load; applyAction merely sets `page.form`. With applyAction here the
+			// optimistic badge went to zero while the list kept its unread styling and
+			// the "Mark all as read" button stayed on screen until the next
+			// navigation — the server was never asked what actually happened.
+			await update();
 		};
 	};
 </script>
