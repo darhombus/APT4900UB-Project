@@ -2,7 +2,7 @@ import type { GetStepTools } from 'inngest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { env } from '$lib/server/env';
-import { sendEmail } from '$lib/server/email';
+import { EmailSendError, sendEmail } from '$lib/server/email';
 import { renderNotificationEmail } from '$lib/server/email-templates';
 import {
 	NOTIFICATION_PRUNE_CRON,
@@ -38,13 +38,16 @@ import type { Database } from '$lib/types/database';
  * one of them is a LEAF — nothing downstream depends on a notification being
  * created, which is what lets every failure here degrade rather than cascade.
  *
- * THE SHAPE EVERY HANDLER SHARES (NTF-3 as amended):
+ * THE SHAPE EVERY HANDLER SHARES (NTF-3, second amendment):
  *   1. load the source entity (throw → retry; missing → loud but terminal)
  *   2. ONE step creating the in-app row(s), conflict-no-op (NTF-7)
- *   3. one step PER EMAIL, each caught: a terminal email failure is logged and
- *      the function still completes successfully
+ *   3. one step PER EMAIL, classifying its own failures: undeliverable → a
+ *      returned "skipped" outcome and a green step; transient → throw, retry,
+ *      and fail the run on exhaustion
  * The order is load-bearing. The in-app row is the durable half of the promise
- * and must never be rolled back by an email that could not be delivered.
+ * and must never be rolled back by an email that could not be delivered — and
+ * because it is an earlier, MEMOIZED step, a retry of an email step cannot
+ * re-enter it except as a conflict-no-op.
  *
  * RETRIES ARE THE INNGEST DEFAULT here, unlike the checkout/payout functions
  * which pin `retries: 3`. NTF-3 asks for default retries on the email step, and
@@ -63,8 +66,22 @@ interface Recipient {
 	payload: NotificationPayload;
 }
 
-/** Why an email did not go out. None of these is a failure. */
-type EmailOutcome = 'sent' | 'skipped_toggle' | 'skipped_no_address';
+/**
+ * How one recipient's email ended (NTF-3, second amendment).
+ *
+ * Every value here is a TERMINAL SUCCESS of the step: the question "could this
+ * message ever be delivered?" was answered no, so there is nothing to retry and
+ * the step completes green. Transient failures are not in this union at all —
+ * they throw, retry, and fail the run on exhaustion.
+ */
+type EmailOutcome =
+	| 'sent'
+	| 'skipped_toggle'
+	| 'skipped_no_address'
+	/** The account was deleted between the event and the send. */
+	| 'skipped_recipient_gone'
+	/** Resend refused the message itself — today, usually the test-domain rule. */
+	| 'skipped_undeliverable';
 
 // ---------------------------------------------------------------------------
 // Source loaders
@@ -225,13 +242,11 @@ async function deliverEmail(
 	ids: NotificationSourceIds,
 	recipient: Recipient
 ): Promise<EmailOutcome> {
-	const { email, emailActivity } = await resolveRecipient(admin, recipient.userId);
+	const lookup = await resolveRecipient(admin, recipient.userId);
 
-	// The account was deleted between the event and this step. Nothing to send and
-	// nothing to retry towards; the in-app row cascaded away with it.
-	if (!email) return 'skipped_no_address';
-
-	if (!shouldSendEmail(type, emailActivity)) return 'skipped_toggle';
+	if (lookup.outcome === 'gone') return 'skipped_recipient_gone';
+	if (lookup.outcome === 'no_address') return 'skipped_no_address';
+	if (!shouldSendEmail(type, lookup.emailActivity)) return 'skipped_toggle';
 
 	const dedupeKey = dedupeKeyFor(type, ids);
 	const rendered = renderNotificationEmail({
@@ -242,51 +257,69 @@ async function deliverEmail(
 		optional: !isTransactional(type)
 	});
 
-	await sendEmail({
-		to: email,
-		subject: rendered.subject,
-		html: rendered.html,
-		text: rendered.text,
-		idempotencyKey: emailIdempotencyKey(type, recipient.userId, dedupeKey)
-	});
+	try {
+		await sendEmail({
+			to: lookup.email,
+			subject: rendered.subject,
+			html: rendered.html,
+			text: rendered.text,
+			idempotencyKey: emailIdempotencyKey(type, recipient.userId, dedupeKey)
+		});
+	} catch (err) {
+		// THE CLASSIFICATION (NTF-3, second amendment). A message Resend will never
+		// accept is a terminal success of this step: retrying it four more times
+		// changes nothing, and a run that goes red for it teaches the dashboard to
+		// be ignored. Logged rather than silent, because "no email went out" should
+		// still be findable.
+		if (err instanceof EmailSendError && err.undeliverable) {
+			console.warn(
+				'[notifications] %s for %s is undeliverable (%s): %s',
+				type,
+				recipient.label,
+				err.code,
+				err.message
+			);
+			return 'skipped_undeliverable';
+		}
+		// Everything else — network, 5xx, rate limits, a dead API key — is worth
+		// retrying, and worth going red about if the retries do not fix it.
+		throw err;
+	}
 
 	return 'sent';
 }
 
 /**
- * Run one email step per recipient, each independently survivable.
+ * Run one email step per recipient (NTF-3, second amendment).
  *
- * `.catch()` on the step is the whole of NTF-3's "terminal failure is logged and
- * the function completes successfully". Inngest retries the step first; this
- * catches only what is left after the retries are exhausted, so a transient
- * Resend outage still gets its attempts, and a permanently undeliverable address
- * — the test-domain restriction, today, for every recipient but the operator —
- * does not turn every notification run red.
+ * NO BLANKET `.catch()`, and its removal is the point. The first implementation
+ * swallowed every step failure so the function would "complete successfully" —
+ * which it then did not do anyway (a permanently failed step marks the run
+ * FAILED regardless of what userland catches), and which would have hidden a
+ * dead API key behind a green run if it had worked.
  *
- * One recipient's failure does not touch the other's: the loop continues.
+ * The classification now lives one level down, in `deliverEmail`, where the
+ * error is actually understood: undeliverable becomes a returned outcome and the
+ * step completes; anything else propagates, retries, and fails the run.
+ *
+ * WHAT A RED RUN MEANS AFTER THIS: deliverable mail was lost after real retries.
+ * That is worth an alert. It no longer means "a test fixture had no mailbox".
+ *
+ * The in-app rows are a PRIOR step and are memoized, so none of this can revert
+ * them; a replay re-enters creation as a conflict-no-op.
  */
 async function emailRecipients(
 	step: StepTools,
 	type: NotificationType,
 	ids: NotificationSourceIds,
 	recipients: Recipient[]
-): Promise<Record<string, EmailOutcome | 'failed'>> {
-	const outcomes: Record<string, EmailOutcome | 'failed'> = {};
+): Promise<Record<string, EmailOutcome>> {
+	const outcomes: Record<string, EmailOutcome> = {};
 
 	for (const recipient of recipients) {
-		outcomes[recipient.label] = await step
-			.run(`email-${recipient.label}`, async () =>
-				deliverEmail(createSupabaseAdmin(), type, ids, recipient)
-			)
-			.catch((err: unknown) => {
-				console.error(
-					'[notifications] email for %s (%s) failed terminally: %s',
-					type,
-					recipient.label,
-					err instanceof Error ? err.message : String(err)
-				);
-				return 'failed' as const;
-			});
+		outcomes[recipient.label] = await step.run(`email-${recipient.label}`, async () =>
+			deliverEmail(createSupabaseAdmin(), type, ids, recipient)
+		);
 	}
 
 	return outcomes;

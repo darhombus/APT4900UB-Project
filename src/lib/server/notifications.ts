@@ -331,34 +331,67 @@ export async function pruneReadNotifications(
 }
 
 /**
- * The recipient's email address and activity preference, in one place.
+ * True when the admin API is saying "that user does not exist" rather than
+ * "I could not answer" (NTF-3, second amendment).
+ *
+ * The distinction is the whole point: a deleted account is a final answer and
+ * must cost no retries, while a dead credential or a network fault must be
+ * retried and, failing that, must go red. Supabase reports the first as a 404,
+ * and the message is checked as well because the status is not populated on
+ * every transport path.
+ */
+export function isMissingUserError(error: { status?: number; message?: string }): boolean {
+	return error.status === 404 || /user not found/i.test(error.message ?? '');
+}
+
+/**
+ * Who to email, and whether they want it.
  *
  * The address comes from `auth.users` via the admin API (NTF-15): there is no
  * email column in the public schema, and this phase deliberately does not add
  * one — a copy would be a second source of truth that drifts the first time
  * someone changes their address.
  *
- * Returns null for the address when the user is gone (deleted between the event
- * and the send). The caller treats that as "nothing to send", not as an error:
- * the in-app row is already written and cascades away with the user anyway.
+ * A DISCRIMINATED RESULT rather than a nullable address, because the three
+ * outcomes are genuinely different and the caller routes on them:
+ *   - `gone`       the account was deleted between the event and the send.
+ *                  Nothing to send and nothing to retry towards; the in-app row
+ *                  cascaded away with the user.
+ *   - `no_address` the account exists but carries no email.
+ *   - `ok`         send, subject to the toggle.
+ *
+ * This shape replaced a nullable address that threw on ANY lookup error. The old
+ * version turned a deleted fixture user into five retries and a FAILED run — the
+ * exact behaviour its own comment said it was avoiding, observed in the
+ * 2026-08-11 diagnostic run.
  */
-export async function resolveRecipient(
-	admin: Admin,
-	userId: string
-): Promise<{ email: string | null; emailActivity: boolean | null }> {
+export type RecipientLookup =
+	| { outcome: 'ok'; email: string; emailActivity: boolean | null }
+	| { outcome: 'gone' }
+	| { outcome: 'no_address' };
+
+export async function resolveRecipient(admin: Admin, userId: string): Promise<RecipientLookup> {
 	const [{ data: userData, error: userError }, { data: prefs }] = await Promise.all([
 		admin.auth.admin.getUserById(userId),
 		admin.from('profiles_private').select('email_activity').eq('id', userId).maybeSingle()
 	]);
 
-	// A failed admin lookup is infrastructure (a dead key looks exactly like this)
-	// — throw so the email step retries rather than silently sending nothing.
 	if (userError) {
+		// A vanished account is terminal. Anything else is infrastructure (a dead
+		// key looks exactly like this) — throw so the step retries rather than
+		// silently sending nothing.
+		if (isMissingUserError(userError)) return { outcome: 'gone' };
 		throw new Error(`resolveRecipient(${userId}) failed: ${userError.message}`);
 	}
 
+	const email = userData?.user?.email;
+	// A null user with no error means the same thing as a 404.
+	if (!userData?.user) return { outcome: 'gone' };
+	if (!email) return { outcome: 'no_address' };
+
 	return {
-		email: userData?.user?.email ?? null,
+		outcome: 'ok',
+		email,
 		// Absent row → null → shouldSendEmail reads it as true (NTF-4 corollary).
 		emailActivity: prefs?.email_activity ?? null
 	};
