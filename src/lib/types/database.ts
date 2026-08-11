@@ -373,6 +373,44 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          dedupe_key: string
+          id: string
+          payload: Json
+          read_at: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key: string
+          id?: string
+          payload?: Json
+          read_at?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          payload?: Json
+          read_at?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           amount_total: number
@@ -610,18 +648,21 @@ export type Database = {
       }
       profiles_private: {
         Row: {
+          email_activity: boolean
           id: string
           location: string | null
           phone: string | null
           updated_at: string
         }
         Insert: {
+          email_activity?: boolean
           id: string
           location?: string | null
           phone?: string | null
           updated_at?: string
         }
         Update: {
+          email_activity?: boolean
           id?: string
           location?: string | null
           phone?: string | null
@@ -833,6 +874,11 @@ export type Database = {
         Returns: boolean
       }
       is_seller_or_admin: { Args: never; Returns: boolean }
+      mark_all_notifications_read: { Args: never; Returns: number }
+      mark_notification_read: {
+        Args: { p_notification_id: string }
+        Returns: boolean
+      }
       payout_sweep_candidates: {
         Args: { p_min_kes_cents: number }
         Returns: {
