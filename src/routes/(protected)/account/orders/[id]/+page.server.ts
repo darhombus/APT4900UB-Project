@@ -3,6 +3,7 @@ import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { cancelCheckout } from '$lib/server/checkout';
 import { findSpokenConversation } from '$lib/server/messaging';
 import { deleteReview, findReviewForOrder, insertReview } from '$lib/server/reviews';
+import { emitOrderCompleted } from '$lib/server/notification-events';
 import { coverPath, publicUrl } from '$lib/listing-images';
 import { parseBody, parseRating } from '$lib/reviews';
 import type { Actions, PageServerLoad } from './$types';
@@ -103,6 +104,17 @@ export const actions: Actions = {
 		if (rpcError) {
 			return fail(400, { formError: 'That order could no longer be confirmed.' });
 		}
+		// ONE OF TWO emission points for this event (Notifications PRD, NTF-17). The
+		// other is the auto-complete backstop; there is no shared chokepoint the way
+		// `finalized` is for payment, because the buyer's path and the backstop are
+		// separate definer functions with separate callers. Emitting from only one
+		// would silently notify nobody for every order completed the other way.
+		//
+		// After the RPC succeeded, so a refused completion notifies nobody. Failure
+		// to emit must not fail the action the buyer just took — the order IS
+		// completed at this point, and a missing notification is not worth turning
+		// that into an error page.
+		await emitOrderCompleted(params.id);
 		// POST-redirect-get so a refresh can't re-submit.
 		redirect(303, `/account/orders/${params.id}`);
 	},

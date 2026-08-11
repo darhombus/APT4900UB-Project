@@ -108,6 +108,54 @@ export const boostActivated = eventType('boost/activated', {
 	schema: staticSchema<{ boostId: string; expiresAt: string }>()
 });
 
+/**
+ * An order reached `completed` (Notifications PRD — Section 3; NTF-17).
+ *
+ * EMITTED FROM TWO PLACES, deliberately and per the ratified survey: the buyer's
+ * `confirmReceipt` action and the `auto-complete-order` backstop. There is no
+ * single chokepoint the way `finalized` is for payment — `complete_order` and
+ * `auto_complete_order` are separate SECURITY DEFINER functions with separate
+ * callers — so a single emission point would silently miss half of all
+ * completions. Which half depends on how responsive buyers are, which is exactly
+ * the kind of bug that hides.
+ *
+ * Both emissions are safe together: the notification's dedupe_key is the order
+ * id, so the unique constraint collapses a double emission to one row per
+ * recipient (NTF-17).
+ */
+export const orderCompleted = eventType('checkout/order.completed', {
+	schema: staticSchema<{ orderId: string }>()
+});
+
+/**
+ * A payout transfer was verified as sent (Notifications PRD — Section 3).
+ *
+ * Emitted from the transfer-webhook branch, and ONLY after Paystack's direct
+ * verify agreed with the webhook and the transition graph accepted the move to
+ * `success` (P8). A seller is told their money moved only when the platform
+ * itself believes it.
+ */
+export const payoutSent = eventType('payout/sent', {
+	schema: staticSchema<{ payoutId: string }>()
+});
+
+/**
+ * A buyer left a review (Notifications PRD — Section 3).
+ *
+ * Carries the ORDER id, not the review id: `insertReview` does not read back the
+ * inserted row, and NTF-17 fixes the dedupe_key at the order id anyway — one
+ * review per order (the `reviews_order_id_key` unique constraint) makes the two
+ * interchangeable as identity, and the order id is the one already in hand.
+ */
+export const reviewReceived = eventType('review/received', {
+	schema: staticSchema<{ orderId: string }>()
+});
+
+/** A seller replied to a review (Notifications PRD — Section 3). */
+export const reviewResponse = eventType('review/response', {
+	schema: staticSchema<{ reviewId: string }>()
+});
+
 export const inngest = new Inngest({
 	id: 'mysoko',
 	/**

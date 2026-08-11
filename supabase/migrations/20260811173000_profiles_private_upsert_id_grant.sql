@@ -1,0 +1,60 @@
+-- ============================================================================
+-- PROFILES_PRIVATE — add `id` to the UPDATE allowlist so UPSERT works again
+-- (Notifications PRD — NTF-16, amended by this migration's evidence)
+--
+-- A FIX FOR A REGRESSION INTRODUCED HOURS EARLIER by 20260811150000, caught by
+-- tests/db/notifications.test.ts before it reached any hosted tier. Recorded in
+-- full because the mechanism is not obvious and will otherwise be rediscovered.
+--
+-- NTF-16 specified the UPDATE allowlist as exactly (phone, location,
+-- email_activity), excluding `id` on the same reasoning BST-16 used for
+-- `profiles`: reassigning a row's identity is meaningless at best and a
+-- collision at worst. That reasoning is sound for `profiles`, whose settings
+-- form issues a plain UPDATE. It is WRONG for `profiles_private`, and the
+-- difference is which SQL the client actually sends.
+--
+--   profiles          .update({...}).eq('id', …)  →  UPDATE … SET full_name = …
+--   profiles_private  .upsert({...})              →  INSERT … ON CONFLICT (id)
+--                                                    DO UPDATE SET id = excluded.id,
+--                                                                  phone = excluded.phone, …
+--
+-- PostgREST puts EVERY key of the payload in the DO UPDATE SET list, `id`
+-- included — and column privileges are checked against the statement's target
+-- list, so the assignment `id = excluded.id` requires UPDATE on `id` even though
+-- it writes the value the row already holds. Without this grant the upsert fails
+-- 42501, which broke two things at once:
+--
+--   * the NTF-4 toggle, which had never worked, and
+--   * the pre-existing account-settings save (phone and location), which had
+--     worked since the PII phase and stopped working the moment the allowlist
+--     landed.
+--
+-- WHY VERIFICATION MISSED IT. The migration's own psql check exercised a
+-- HAND-WRITTEN upsert (`do update set phone = …, location = …`) rather than the
+-- one supabase-js generates. It tested the assumption, not the client — so it
+-- passed while the real path was broken. The lesson generalises past this
+-- migration: a column allowlist on a table written by `.upsert()` must be
+-- verified through the client, or through SQL copied from it.
+--
+-- WHY GRANTING `id` IS STILL SAFE. Privilege is not the only gate here. The
+-- profiles_private_update policy (20260808100000) carries
+--
+--     using (id = (select auth.uid())) with check (id = (select auth.uid()))
+--
+-- so a caller who reassigns `id` to anyone else fails the WITH CHECK and the
+-- statement errors. The grant permits the assignment; the policy pins its value.
+-- That is the same privilege-AND-policy pairing BST-16 described — arrived at
+-- from the other direction, because here the grant has to exist for the app to
+-- work and the policy is what makes it harmless.
+-- ============================================================================
+
+-- Additive: the three columns granted by 20260811150000 keep their privilege,
+-- and `id` joins them. No REVOKE, deliberately — revoking first would drop the
+-- existing grants and re-granting them here would leave two migrations claiming
+-- authorship of the same allowlist.
+grant update (id) on public.profiles_private to authenticated;
+
+-- The INSERT allowlist already includes `id` and is unchanged. `updated_at`
+-- remains excluded from both lists: it is assigned by the
+-- profiles_private_updated_at BEFORE trigger, and a trigger's assignments are
+-- not checked against the caller's column privileges.

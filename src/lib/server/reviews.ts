@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/types/database';
 import { createSupabaseAdmin } from '$lib/server/supabase-admin';
+import { emitReviewReceived } from '$lib/server/notification-events';
 
 /**
  * Server-side review reads and writes (Reviews PRD Sections 4, 5, 7).
@@ -312,6 +313,15 @@ export async function insertReview(
 		// Surfaced as a friendly failure, never a 500 (Section 4.1).
 		return { ok: false, error: 'That review could not be saved.' };
 	}
+
+	// Notifications Section 3.2. Carries the ORDER id and nothing else: the
+	// insert above deliberately does not read the row back — NTF-17 fixes the
+	// dedupe_key at the order id precisely so this contract need not change — and
+	// the handler looks the review up itself.
+	//
+	// Emitted only after a successful insert, so the 23505 double-submit path
+	// above notifies nobody a second time.
+	await emitReviewReceived(order.id);
 
 	return { ok: true };
 }

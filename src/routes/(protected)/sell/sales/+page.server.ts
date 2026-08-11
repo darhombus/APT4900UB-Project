@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { getCoverUrl } from '$lib/listing-images';
 import { listReviewsForSeller, submitSellerResponse } from '$lib/server/reviews';
+import { emitReviewResponse } from '$lib/server/notification-events';
 import { REVIEW_RESPONSE_MAX } from '$lib/reviews';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -171,6 +172,11 @@ export const actions: Actions = {
 
 		const result = await submitSellerResponse(supabase, reviewId, response);
 		if (!result.ok) return fail(400, { responseError: result.error });
+
+		// Notifications Section 3.2 — the buyer learns their review was answered.
+		// After the RPC, so a reply refused by submit_seller_response (not the
+		// seller, already answered, review hidden) notifies nobody.
+		await emitReviewResponse(reviewId);
 
 		// POST-redirect-get, matching every other write in the app.
 		redirect(303, '/sell/sales');
