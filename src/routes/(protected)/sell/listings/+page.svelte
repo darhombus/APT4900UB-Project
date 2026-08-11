@@ -11,15 +11,18 @@
 
 	let { data }: { data: PageData } = $props();
 
+	// `boosted` sits directly after `active` because it is a SUBSET of active, not
+	// a further step in the lifecycle — putting it at the end would read as one.
 	const tabs = $derived([
 		{ key: 'all', label: 'All', count: data.counts.all },
 		{ key: 'draft', label: 'Draft', count: data.counts.draft },
 		{ key: 'active', label: 'Active', count: data.counts.active },
+		{ key: 'boosted', label: 'Boosted', count: data.counts.boosted },
 		{ key: 'paused', label: 'Paused', count: data.counts.paused },
 		{ key: 'sold', label: 'Sold', count: data.counts.sold }
 	] as const);
 
-	const TAB_KEYS = ['all', 'draft', 'active', 'paused', 'sold'] as const;
+	const TAB_KEYS = ['all', 'draft', 'active', 'boosted', 'paused', 'sold'] as const;
 	type Tab = (typeof TAB_KEYS)[number];
 
 	function tabFromUrl(url: URL): Tab {
@@ -32,7 +35,13 @@
 	// round-trip or loading state.
 	const activeTab = $derived(tabFromUrl(page.url));
 	const visible = $derived(
-		activeTab === 'all' ? data.listings : data.listings.filter((l) => l.status === activeTab)
+		activeTab === 'all'
+			? data.listings
+			: activeTab === 'boosted'
+				? // Matched on the attribute, not on `status` — a boosted listing's status
+					// is 'active', so the status comparison below would return nothing.
+					data.listings.filter((l) => l.isBoosted)
+				: data.listings.filter((l) => l.status === activeTab)
 	);
 
 	const dateFmt = new Intl.DateTimeFormat('en-KE', {
@@ -90,12 +99,28 @@
 
 <!-- Status, plus the boost state when one is running. Two badges rather than a
      'boosted' status: a boost is orthogonal to the listing lifecycle, and folding
-     it into the status enum would lose whether the listing is active underneath. -->
+     it into the status enum would lose whether the listing is active underneath.
+
+     The expiry sits UNDER the badges rather than inside the Featured pill or in a
+     column of its own. Inside the pill it would make a label carry data and grow
+     the badge; as a column it would be empty on almost every row, since most
+     listings are never boosted. -->
 {#snippet rowBadges(l: (typeof data.listings)[number])}
-	<div class="flex flex-wrap items-center justify-end gap-1.5">
-		{@render statusBadge(l.status)}
-		{#if l.isBoosted}
-			<Badge variant="featured">Featured</Badge>
+	<!-- The two call sites sit on opposite sides of the `sm` breakpoint — the mobile
+	     card (sm:hidden) puts this at the right edge, the desktop table (hidden
+	     sm:block) puts it in a left-aligned Status cell — so the alignment can
+	     simply follow the breakpoint. -->
+	<div class="flex flex-col items-end gap-1 sm:items-start">
+		<div class="flex flex-wrap items-center gap-1.5">
+			{@render statusBadge(l.status)}
+			{#if l.isBoosted}
+				<Badge variant="featured">Featured</Badge>
+			{/if}
+		</div>
+		{#if l.boostedUntil}
+			<span class="tnum text-xs whitespace-nowrap text-subtle">
+				until {fmtDate(l.boostedUntil)}
+			</span>
 		{/if}
 	</div>
 {/snippet}
@@ -279,7 +304,16 @@
 
 		{#if visible.length === 0}
 			<Card class="text-center">
-				<p class="py-6 text-sm text-muted">No {activeTab} listings.</p>
+				{#if activeTab === 'boosted'}
+					<!-- An empty tab should point at the control that fills it, and the
+					     control is named Boost on every active row — so name it here too. -->
+					<p class="py-6 text-sm text-muted">
+						Nothing boosted right now. Use <span class="font-medium text-ink">Boost</span> on an active
+						listing to lift it above others in search and category results.
+					</p>
+				{:else}
+					<p class="py-6 text-sm text-muted">No {activeTab} listings.</p>
+				{/if}
 			</Card>
 		{:else}
 			<!-- Desktop table -->
