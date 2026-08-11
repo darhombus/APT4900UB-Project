@@ -220,13 +220,33 @@
 		void client.realtime.setAuth(token);
 
 		let pending: ReturnType<typeof setTimeout> | null = null;
+		// MONOTONIC REQUEST TOKEN. `pending` is cleared when the timer fires, not
+		// when the fetch settles, so two counts can be in flight at once — and if
+		// the older one resolves last, it overwrites the newer with a stale, LOWER
+		// number and the badge stays wrong until the next navigation. Ignoring any
+		// response that is not the newest issued makes the last request win
+		// regardless of the order the network returns them in.
+		//
+		// Clearing `pending` on settle instead would fix the overlap by preventing
+		// it, but at a worse cost: an event arriving during a slow fetch would find
+		// `pending` still set and be dropped entirely, and that fetch may have been
+		// issued before the row was committed.
+		//
+		// This is the evidenced mechanism behind an UNREPRODUCED failure (0/19 in
+		// the 2026-08-11 diagnostic run) — see the local project notes, which
+		// records it honestly as a fix to a hypothesis rather than to a
+		// demonstrated fault.
+		let latest = 0;
 		const refresh = () => {
 			if (pending) return;
 			pending = setTimeout(() => {
 				pending = null;
+				const seq = ++latest;
 				fetch('/api/notification-count')
 					.then((r) => r.json())
-					.then(({ count }) => notificationCountStore.set(count))
+					.then(({ count }) => {
+						if (seq === latest) notificationCountStore.set(count);
+					})
 					.catch(() => {});
 			}, 250);
 		};
