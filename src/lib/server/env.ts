@@ -52,15 +52,26 @@ export const env = {
 	// ── App ───────────────────────────────────────────────────────────────────
 	PUBLIC_APP_URL: PUBLIC_APP_URL?.trim() ? PUBLIC_APP_URL : 'http://localhost:5173',
 
+	// ── Email — REQUIRED from the notifications phase (NTF-8) ─────────────────
+	// Promoted out of the optional block below, per the TODO that block carried:
+	// the notifications phase is the one that sends mail, and a tier running
+	// without this key would create in-app notifications while silently failing
+	// every email — the failure would be visible only in Inngest run logs. Fail
+	// at startup instead.
+	//
+	// The sender address is deliberately NOT here: it is a code constant in
+	// $lib/server/email, so shipping email adds no new variable to any Vercel
+	// scope (a scope missing one fails the build outright).
+	RESEND_API_KEY: required('RESEND_API_KEY', RESEND_API_KEY),
+
 	// ── Third-party — OPTIONAL for now ────────────────────────────────────────
-	// TODO(payments-phase): promote these to `required(...)` when the
-	// payments/notifications phase begins. Paystack, Inngest, Africa's Talking
-	// and Resend keys must be present in production from that point on.
+	// TODO(sms-phase): promote AT_* to `required(...)` if SMS ships. Paystack and
+	// Inngest are already present on every tier; they stay optional here only
+	// because the local stack runs without them.
 	PUBLIC_PAYSTACK_PUBLIC_KEY,
 	PAYSTACK_SECRET_KEY,
 	INNGEST_EVENT_KEY,
 	INNGEST_SIGNING_KEY,
 	AT_API_KEY,
-	AT_USERNAME,
-	RESEND_API_KEY
+	AT_USERNAME
 } as const;

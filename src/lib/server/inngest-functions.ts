@@ -9,6 +9,7 @@ import {
 	boostActivated,
 	boostPaymentEventReceived,
 	inngest,
+	orderCompleted,
 	orderCreated,
 	orderPaid,
 	paymentEventReceived,
@@ -152,6 +153,20 @@ export const autoCompleteOrder = inngest.createFunction(
 			if (error) throw new Error(`auto_complete_order failed: ${error.message}`);
 			return data === true;
 		});
+
+		// THE SECOND of this event's two emission points (Notifications PRD,
+		// NTF-17); the first is the buyer's confirmReceipt action. Emitted ONLY when
+		// this run is what completed the order — losing the race to the buyer is a
+		// success here, but it is THEIR action that notifies, not ours, and emitting
+		// on a no-op would be a second event for an order this function did nothing
+		// to. Its own step, so a send failure retries without re-running the
+		// completion.
+		if (completed) {
+			await step.run('notify-completed', async () => {
+				await inngest.send(orderCompleted.create({ orderId }));
+				return true;
+			});
+		}
 
 		return { orderId, completed };
 	}
