@@ -9,6 +9,16 @@ import {
 	payoutInitiateTransfer,
 	payoutWeeklySweep
 } from '$lib/server/inngest-functions';
+import {
+	notifyBoostActivated,
+	notifyBoostExpiring,
+	notifyOrderCompleted,
+	notifyOrderPaid,
+	notifyPayoutSent,
+	notifyReviewReceived,
+	notifyReviewResponse,
+	pruneNotifications
+} from '$lib/server/notification-functions';
 
 /**
  * Inngest's serve endpoint — the single URL Inngest talks to.
@@ -36,6 +46,16 @@ export const { GET, POST, PUT } = serve({
 		payoutInitiateTransfer,
 		payoutWeeklySweep,
 		processBoostPayment,
-		expireBoost
+		expireBoost,
+		// Notifications (Phase 7). Leaves, every one: nothing downstream waits on a
+		// notification, which is why a failure here degrades rather than cascades.
+		notifyOrderPaid,
+		notifyOrderCompleted,
+		notifyPayoutSent,
+		notifyReviewReceived,
+		notifyReviewResponse,
+		notifyBoostActivated,
+		notifyBoostExpiring,
+		pruneNotifications
 	]
 });

@@ -3,6 +3,7 @@ import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { getPaystackClient } from '$lib/server/paystack';
 import { boostPaymentEventReceived, inngest, paymentEventReceived } from '$lib/server/inngest';
 import { handlePaystackWebhook } from '$lib/server/webhook';
+import { emitPayoutSent } from '$lib/server/notification-events';
 import type { RequestHandler } from './$types';
 
 /**
@@ -69,7 +70,12 @@ export const POST: RequestHandler = async ({ request }) => {
 					p_new_status: newStatus
 				});
 				if (error) throw new Error(error.message);
-			}
+			},
+
+			// Notifications Section 3.2. Wiring only, like everything else in this
+			// file — the decision to call it (verified, and the graph accepted the
+			// move to success) lives in $lib/server/webhook.
+			notifyPayoutSent: emitPayoutSent
 		}
 	});
 

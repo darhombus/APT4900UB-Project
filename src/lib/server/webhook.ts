@@ -54,6 +54,19 @@ export interface TransferWebhookDeps {
 	findPayoutByReference(reference: string): Promise<{ id: string; status: string } | null>;
 	/** Calls transition_payout_status; THROWS when the transition graph refuses. */
 	transitionPayout(payoutId: string, newStatus: string): Promise<void>;
+	/**
+	 * Notifications Section 3.2 — the seller learns their money moved.
+	 *
+	 * A CALLBACK, not an import, for the reason every other side effect in this
+	 * module is one: this file is pure decision logic and must stay testable
+	 * without an Inngest client. OPTIONAL, so every existing payout test keeps
+	 * passing untouched and a caller that does not wire notifications behaves
+	 * exactly as this module did before the phase.
+	 *
+	 * Called ONLY after the verify agreed AND the transition graph accepted the
+	 * move to `success` — never on a duplicate delivery the graph refused.
+	 */
+	notifyPayoutSent?(payoutId: string): Promise<void>;
 }
 
 export interface WebhookDeps {
@@ -302,5 +315,19 @@ async function handleTransferEvent(
 	}
 
 	console.info('[payouts] payout %s -> %s via %s (verified)', payout.id, rule.to, eventType);
+
+	// Notifications Section 3.2. Only `success` — a seller is told their money
+	// moved, and `failed`/`reversed` are not that. Deliberately no notification
+	// for those two: what a seller should be told when a transfer fails is a
+	// product question this phase's catalog (NTF-2) does not answer, and inventing
+	// an eighth event here would put it outside the ratified decisions.
+	//
+	// Reached only past the `catch` above, so a duplicate `transfer.success` the
+	// graph refused notifies nobody a second time — the same guard that makes the
+	// transition safe makes the notification safe.
+	if (rule.to === 'success' && payouts.notifyPayoutSent) {
+		await payouts.notifyPayoutSent(payout.id);
+	}
+
 	return finish('transfer_applied');
 }
