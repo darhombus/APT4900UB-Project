@@ -967,6 +967,7 @@ export type Database = {
         Args: { conv_id: string }
         Returns: boolean
       }
+      is_seller: { Args: never; Returns: boolean }
       is_seller_or_admin: { Args: never; Returns: boolean }
       mark_all_notifications_read: { Args: never; Returns: number }
       mark_notification_read: {
