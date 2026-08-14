@@ -847,6 +847,117 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_read_private_profile: {
+        Args: { p_profile_id: string }
+        Returns: {
+          email_activity: boolean
+          id: string
+          location: string
+          phone: string
+          updated_at: string
+        }[]
+      }
+      admin_resolve_dispute: {
+        Args: {
+          p_dispute_id: string
+          p_outcome: string
+          p_refund_reference?: string
+          p_resolution_note: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "disputes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_review_dispute: {
+        Args: { p_dispute_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "disputes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_set_listing_visibility: {
+        Args: { p_action: string; p_listing_id: string; p_note?: string }
+        Returns: {
+          admin_action_id: string
+          note: string
+          prior_status: Database["public"]["Enums"]["listing_status"]
+          seller_id: string
+        }[]
+      }
+      admin_set_review_status: {
+        Args: { p_action: string; p_review_id: string }
+        Returns: {
+          body: string | null
+          buyer_id: string
+          created_at: string
+          id: string
+          listing_id: string
+          order_id: string
+          rating: number
+          seller_id: string
+          seller_responded_at: string | null
+          seller_response: string | null
+          status: Database["public"]["Enums"]["review_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_terminate_boost: {
+        Args: { p_boost_id: string }
+        Returns: {
+          created_at: string
+          duration_days: number
+          expires_at: string | null
+          id: string
+          listing_id: string
+          package_id: string
+          paystack_reference: string
+          price_kes_charged: number
+          seller_id: string
+          starts_at: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "boosts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       auto_complete_order: { Args: { p_order_id: string }; Returns: boolean }
       become_seller: {
         Args: never
@@ -973,6 +1084,10 @@ export type Database = {
       mark_notification_read: {
         Args: { p_notification_id: string }
         Returns: boolean
+      }
+      open_dispute: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: string
       }
       payout_sweep_candidates: {
         Args: { p_min_kes_cents: number }
