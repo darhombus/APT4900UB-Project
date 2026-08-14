@@ -34,6 +34,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_actions: {
+        Row: {
+          action_type: string
+          actor_id: string
+          created_at: string
+          detail: Json
+          id: string
+          target_id: string
+          target_table: string
+        }
+        Insert: {
+          action_type: string
+          actor_id: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          target_id: string
+          target_table: string
+        }
+        Update: {
+          action_type?: string
+          actor_id?: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          target_id?: string
+          target_table?: string
+        }
+        Relationships: []
+      }
       boost_packages: {
         Row: {
           active: boolean
@@ -218,6 +248,60 @@ export type Database = {
           },
         ]
       }
+      disputes: {
+        Row: {
+          created_at: string
+          id: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          opened_by?: string
+          order_id?: string
+          reason?: string
+          refund_reference?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disputes_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disputes_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listing_images: {
         Row: {
           created_at: string
@@ -265,6 +349,9 @@ export type Database = {
           published_at: string | null
           quantity: number
           rating_sum: number
+          removed_prior_status:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count: number
           search_vector: unknown
           seller_id: string
@@ -287,6 +374,9 @@ export type Database = {
           published_at?: string | null
           quantity?: number
           rating_sum?: number
+          removed_prior_status?:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count?: number
           search_vector?: unknown
           seller_id: string
@@ -309,6 +399,9 @@ export type Database = {
           published_at?: string | null
           quantity?: number
           rating_sum?: number
+          removed_prior_status?:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count?: number
           search_vector?: unknown
           seller_id?: string
@@ -841,6 +934,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      dispute_party: { Args: { p_order_id: string }; Returns: boolean }
       expire_pending_order: { Args: { p_order_id: string }; Returns: boolean }
       finalize_order_payment: {
         Args: { p_reference: string; p_verified_amount: number }
@@ -911,6 +1005,9 @@ export type Database = {
           published_at: string | null
           quantity: number
           rating_sum: number
+          removed_prior_status:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count: number
           search_vector: unknown
           seller_id: string
