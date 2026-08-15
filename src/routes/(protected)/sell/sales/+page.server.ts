@@ -4,6 +4,7 @@ import { getCoverUrl } from '$lib/listing-images';
 import { listReviewsForSeller, submitSellerResponse } from '$lib/server/reviews';
 import { emitReviewResponse } from '$lib/server/notification-events';
 import { REVIEW_RESPONSE_MAX } from '$lib/reviews';
+import { earningsBlockFor } from '$lib/disputes';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -146,9 +147,16 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 		// The embed when RLS allowed it, the service-role recovery when it did not.
 		const listing = o.listings ?? recovered.get(o.listing_id) ?? null;
 		const dispute = disputeByOrder.get(o.id) ?? null;
+		// ADM-15. Classified from EVERY dispute on the order, not just the newest
+		// one shown in the panel — a settled refund still blocks earnings even if
+		// a later dispute exists.
+		const earningsBlock = earningsBlockFor(
+			(disputeRows ?? []).filter((d) => d.order_id === o.id).map((d) => d.status)
+		);
 		return {
 			id: o.id,
 			status: o.status,
+			earningsBlock,
 			dispute: dispute
 				? {
 						id: dispute.id,
@@ -177,13 +185,34 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 
 	// Earned so far: only completed orders are payout-eligible (D5), so that is
 	// the figure worth surfacing rather than a total of everything ever started.
-	const completedNet = sales
-		.filter((s) => s.status === 'completed')
+	//
+	// ADM-15 — DISPUTE-AWARE, and it was not before. This figure used to count
+	// every completed order's seller_net, so it disagreed with the payouts
+	// headline during a live dispute and kept counting refunded money forever
+	// after one. Two divergent earnings calculations.
+	//
+	// The withheld money is REPORTED, not silently dropped. A total that quietly
+	// shrinks is the dead end ADM-13 exists to prevent, relocated to this page:
+	// the seller would see a smaller number and no reason for it.
+	const completedSales = sales.filter((s) => s.status === 'completed');
+
+	const completedNet = completedSales
+		.filter((s) => s.earningsBlock === null)
+		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
+	// Temporary — a live dispute. Resolves one way or the other.
+	const heldNet = completedSales
+		.filter((s) => s.earningsBlock === 'held')
+		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
+	// Permanent — the buyer was refunded (ADM-15).
+	const refundedNet = completedSales
+		.filter((s) => s.earningsBlock === 'refunded')
 		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
 
 	return {
 		sales,
 		completedNet,
+		heldNet,
+		refundedNet,
 		reviews,
 		sellerAggregate: {
 			reviewCount: me?.review_count ?? 0,
