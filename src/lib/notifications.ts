@@ -11,7 +11,13 @@
  * this file only knows how to say what happened.
  */
 
-/** The NTF-2 catalog, matching the type CHECK in the migration exactly. */
+/**
+ * The NTF-2 catalog, matching the type CHECK in the migration exactly.
+ *
+ * The last four are the ADM phase's (ADM-8, ADM-13). Confirmed against LIVE
+ * catalog state rather than migration text: `notifications_type_check` carries
+ * all eleven values.
+ */
 export const NOTIFICATION_TYPES = [
 	'order.paid',
 	'order.completed',
@@ -19,7 +25,11 @@ export const NOTIFICATION_TYPES = [
 	'review.received',
 	'review.response',
 	'boost.activated',
-	'boost.expiring_24h'
+	'boost.expiring_24h',
+	'dispute.opened',
+	'dispute.under_review',
+	'dispute.resolved',
+	'listing.removed'
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -38,7 +48,17 @@ export function isNotificationType(value: string): value is NotificationType {
  */
 export type NotificationRole = 'buyer' | 'seller';
 
-/** What a handler stores in `payload`. Every field is optional at read time. */
+/** How a dispute ended, for `dispute.resolved` copy (ADM-3's two outcomes). */
+export type DisputeOutcome = 'refunded' | 'rejected';
+
+/**
+ * What a handler stores in `payload`. Every field is optional at read time.
+ *
+ * NOT the same type as `NotificationSourceIds` in $lib/server/notifications,
+ * and widening one does not widen the other — they do different jobs. This is
+ * what gets stored in the payload jsonb and read by copy/href/icon; that one
+ * feeds `dedupeKeyFor` for idempotency and never reaches the renderer.
+ */
 export interface NotificationPayload {
 	role?: NotificationRole;
 	orderId?: string;
@@ -51,6 +71,20 @@ export interface NotificationPayload {
 	amount?: number;
 	rating?: number;
 	expiresAt?: string;
+	/** ADM-8. Without this, `notificationHref` cannot link a dispute anywhere. */
+	disputeId?: string;
+	/**
+	 * ADM-13(c) — the admin's takedown reason, and ADM-3's resolution note. Free
+	 * text written by an admin, so it is rendered as TEXT, never as markup.
+	 */
+	note?: string;
+	/**
+	 * ADM-3's two outcomes. Beyond the ten-item widening list, and deliberately:
+	 * `role` alone tells a party WHO they are, not WHAT was decided, and
+	 * "your dispute was resolved" without saying how is precisely the silent dead
+	 * end ADM-13 exists to prevent.
+	 */
+	disputeOutcome?: DisputeOutcome;
 }
 
 export interface NotificationRow {
@@ -175,6 +209,72 @@ export function notificationCopy(
 				body: `The boost on ${titleOf(payload)} expires in about 24 hours. You can extend it at any time — extending adds to the time you have left.`,
 				action: 'Extend the boost'
 			};
+
+		// ---- ADM-8 disputes -------------------------------------------------
+		// Single-party, so no role branch: only the seller is told (ADM-8).
+		case 'dispute.opened':
+			return {
+				title: 'A buyer opened a dispute',
+				body: `A buyer has raised a problem with their order for ${titleOf(payload)}. Our team will look into it. Your earnings from this order are on hold until it is settled.`,
+				action: 'View the sale'
+			};
+
+		// Buyer-facing, and the only one of the four that is not transactional —
+		// nothing has moved yet, this is a progress update (ADM-12).
+		case 'dispute.under_review':
+			return {
+				title: 'Your dispute is being reviewed',
+				body: `We are looking into the problem you reported with ${itemOf(payload)}. We will let you know as soon as there is a decision.`,
+				action: 'View your order'
+			};
+
+		// The role discriminator, the order.paid pattern (ADM-12) — the two
+		// parties need materially different wording on a refund outcome. Branching
+		// on the OUTCOME too, because "resolved" alone tells neither of them what
+		// actually happened.
+		case 'dispute.resolved': {
+			const refunded = payload.disputeOutcome === 'refunded';
+			const note = payload.note?.trim();
+			const because = note ? ` ${note}` : '';
+
+			if (payload.role === 'seller') {
+				return refunded
+					? {
+							title: 'A dispute was settled with a refund',
+							body: `The buyer has been refunded for ${itemOf(payload)}.${because} Your earnings from this order will not be paid out.`,
+							action: 'View the sale'
+						}
+					: {
+							title: 'A dispute was closed',
+							body: `The dispute on ${titleOf(payload)} was closed without a refund.${because} Your earnings from this order are no longer on hold.`,
+							action: 'View the sale'
+						};
+			}
+
+			return refunded
+				? {
+						title: 'Your refund is on its way',
+						body: `We have refunded your payment for ${itemOf(payload)}.${because} It goes back the same way you paid.`,
+						action: 'View your order'
+					}
+				: {
+						title: 'Your dispute was closed',
+						body: `We reviewed the problem you reported with ${itemOf(payload)} and did not issue a refund.${because}`,
+						action: 'View your order'
+					};
+		}
+
+		// ---- ADM-13 moderation ----------------------------------------------
+		// The whole point of this type: without it the seller sees a listing with
+		// every action disabled and no explanation.
+		case 'listing.removed': {
+			const note = payload.note?.trim();
+			return {
+				title: 'Your listing was taken down',
+				body: `${titleOf(payload)} has been removed by our team and is no longer visible to buyers.${note ? ` ${note}` : ''}`,
+				action: 'View your listings'
+			};
+		}
 	}
 }
 
@@ -205,15 +305,37 @@ export function notificationHref(type: NotificationType, payload: NotificationPa
 		case 'boost.activated':
 		case 'boost.expiring_24h':
 			return '/sell/listings?tab=boosted';
+
+		// The seller has no per-order detail route — /sell/sales is the list and
+		// the dispute panel renders on the row, so that is where the seller's
+		// dispute links go. The buyer's go to their own order page.
+		case 'dispute.opened':
+			return '/sell/sales';
+		case 'dispute.under_review':
+			return orderHref;
+		case 'dispute.resolved':
+			return payload.role === 'seller' ? '/sell/sales' : orderHref;
+
+		// Not ?tab=removed: a taken-down listing is not in any of the management
+		// tabs' filters, and pointing at a tab that will not contain it is the
+		// dead end ADM-13 exists to close.
+		case 'listing.removed':
+			return '/sell/listings';
 	}
 }
 
 /**
  * The icon glyph for the inbox row, keyed by what the notification is ABOUT
- * rather than by type: money, an order, a review, a boost. Four shapes across
- * seven types is deliberate — the list should be scannable by category.
+ * rather than by type: money, an order, a review, a boost, an enforcement
+ * action. Five shapes across eleven types is deliberate — the list should be
+ * scannable by category.
+ *
+ * `moderation` is the ADM-8 addition. Disputes deliberately do NOT get their own
+ * shape: they are order-anchored, so they reuse `order`. A takedown is not — no
+ * existing shape fits an enforcement action, and `review` would actively mislead
+ * a seller into thinking a buyer had written something.
  */
-export type NotificationIcon = 'money' | 'order' | 'review' | 'boost';
+export type NotificationIcon = 'money' | 'order' | 'review' | 'boost' | 'moderation';
 
 export function notificationIcon(type: NotificationType): NotificationIcon {
 	switch (type) {
@@ -221,6 +343,9 @@ export function notificationIcon(type: NotificationType): NotificationIcon {
 		case 'payout.sent':
 			return 'money';
 		case 'order.completed':
+		case 'dispute.opened':
+		case 'dispute.under_review':
+		case 'dispute.resolved':
 			return 'order';
 		case 'review.received':
 		case 'review.response':
@@ -228,5 +353,7 @@ export function notificationIcon(type: NotificationType): NotificationIcon {
 		case 'boost.activated':
 		case 'boost.expiring_24h':
 			return 'boost';
+		case 'listing.removed':
+			return 'moderation';
 	}
 }

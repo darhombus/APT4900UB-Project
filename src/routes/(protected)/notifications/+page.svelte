@@ -11,15 +11,21 @@
 	/**
 	 * Tint by what the notification is ABOUT, not by type:
 	 *   brand   — money moved (payment in, payout out)
-	 *   neutral — an order moved through its lifecycle
+	 *   neutral — an order moved through its lifecycle, disputes included
 	 *   accent  — attention on a listing's reputation or visibility
-	 * Seven types, three tones, so the list is scannable before it is read.
+	 *   error   — an enforcement action against the seller (ADM-8 'moderation')
+	 * Eleven types, four tones, so the list is scannable before it is read.
+	 *
+	 * `moderation` is the only tone that is not shared: a takedown is the one
+	 * event here the recipient did not cause and cannot undo, and tinting it like
+	 * a boost or a review would bury exactly the row a seller most needs to see.
 	 */
 	const TONES: Record<NotificationIcon, string> = {
 		money: 'bg-brand-tint text-brand-strong',
 		order: 'bg-neutral-tint text-neutral-strong',
 		review: 'bg-accent-tint text-accent-strong',
-		boost: 'bg-accent-tint text-accent-strong'
+		boost: 'bg-accent-tint text-accent-strong',
+		moderation: 'bg-error-tint text-error-strong'
 	};
 
 	// Opening a notification is one fewer unread, so the badge should not wait for
@@ -122,6 +128,22 @@
 											stroke="currentColor"
 											stroke-width="1.5"
 											stroke-linejoin="round"
+										/>
+									{:else if n.icon === 'moderation'}
+										<!-- A shield. Not a star: this chain's final `else` is the BOOST
+										     glyph, so without this arm a takedown would draw a star —
+										     the same mislead ADM-8 rejected 'review' for. -->
+										<path
+											d="M10 3.2 4.8 5.4v4.1c0 3 2.1 5.8 5.2 6.9 3.1-1.1 5.2-3.9 5.2-6.9V5.4L10 3.2Z"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M7.9 10.6h4.2"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
 										/>
 									{:else}
 										<path

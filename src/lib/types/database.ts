@@ -34,6 +34,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_actions: {
+        Row: {
+          action_type: string
+          actor_id: string
+          created_at: string
+          detail: Json
+          id: string
+          target_id: string
+          target_table: string
+        }
+        Insert: {
+          action_type: string
+          actor_id: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          target_id: string
+          target_table: string
+        }
+        Update: {
+          action_type?: string
+          actor_id?: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          target_id?: string
+          target_table?: string
+        }
+        Relationships: []
+      }
       boost_packages: {
         Row: {
           active: boolean
@@ -218,6 +248,60 @@ export type Database = {
           },
         ]
       }
+      disputes: {
+        Row: {
+          created_at: string
+          id: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          opened_by?: string
+          order_id?: string
+          reason?: string
+          refund_reference?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disputes_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disputes_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listing_images: {
         Row: {
           created_at: string
@@ -265,6 +349,9 @@ export type Database = {
           published_at: string | null
           quantity: number
           rating_sum: number
+          removed_prior_status:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count: number
           search_vector: unknown
           seller_id: string
@@ -287,6 +374,9 @@ export type Database = {
           published_at?: string | null
           quantity?: number
           rating_sum?: number
+          removed_prior_status?:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count?: number
           search_vector?: unknown
           seller_id: string
@@ -309,6 +399,9 @@ export type Database = {
           published_at?: string | null
           quantity?: number
           rating_sum?: number
+          removed_prior_status?:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count?: number
           search_vector?: unknown
           seller_id?: string
@@ -754,6 +847,117 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_read_private_profile: {
+        Args: { p_profile_id: string }
+        Returns: {
+          email_activity: boolean
+          id: string
+          location: string
+          phone: string
+          updated_at: string
+        }[]
+      }
+      admin_resolve_dispute: {
+        Args: {
+          p_dispute_id: string
+          p_outcome: string
+          p_refund_reference?: string
+          p_resolution_note: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "disputes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_review_dispute: {
+        Args: { p_dispute_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          opened_by: string
+          order_id: string
+          reason: string
+          refund_reference: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "disputes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_set_listing_visibility: {
+        Args: { p_action: string; p_listing_id: string; p_note?: string }
+        Returns: {
+          admin_action_id: string
+          note: string
+          prior_status: Database["public"]["Enums"]["listing_status"]
+          seller_id: string
+        }[]
+      }
+      admin_set_review_status: {
+        Args: { p_action: string; p_review_id: string }
+        Returns: {
+          body: string | null
+          buyer_id: string
+          created_at: string
+          id: string
+          listing_id: string
+          order_id: string
+          rating: number
+          seller_id: string
+          seller_responded_at: string | null
+          seller_response: string | null
+          status: Database["public"]["Enums"]["review_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_terminate_boost: {
+        Args: { p_boost_id: string }
+        Returns: {
+          created_at: string
+          duration_days: number
+          expires_at: string | null
+          id: string
+          listing_id: string
+          package_id: string
+          paystack_reference: string
+          price_kes_charged: number
+          seller_id: string
+          starts_at: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "boosts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       auto_complete_order: { Args: { p_order_id: string }; Returns: boolean }
       become_seller: {
         Args: never
@@ -841,6 +1045,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      dispute_party: { Args: { p_order_id: string }; Returns: boolean }
       expire_pending_order: { Args: { p_order_id: string }; Returns: boolean }
       finalize_order_payment: {
         Args: { p_reference: string; p_verified_amount: number }
@@ -873,11 +1078,16 @@ export type Database = {
         Args: { conv_id: string }
         Returns: boolean
       }
+      is_seller: { Args: never; Returns: boolean }
       is_seller_or_admin: { Args: never; Returns: boolean }
       mark_all_notifications_read: { Args: never; Returns: number }
       mark_notification_read: {
         Args: { p_notification_id: string }
         Returns: boolean
+      }
+      open_dispute: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: string
       }
       payout_sweep_candidates: {
         Args: { p_min_kes_cents: number }
@@ -911,6 +1121,9 @@ export type Database = {
           published_at: string | null
           quantity: number
           rating_sum: number
+          removed_prior_status:
+            | Database["public"]["Enums"]["listing_status"]
+            | null
           review_count: number
           search_vector: unknown
           seller_id: string

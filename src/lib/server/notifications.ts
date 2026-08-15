@@ -36,10 +36,35 @@ type Caller = SupabaseClient<Database>;
  * is `payout.sent`. Treating it as transactional would mean a user who switched
  * activity email OFF still gets mail for something they did themselves.
  */
+/*
+ * ⚠️ NOTHING CHECKS THIS SET. It is a plain Set with no exhaustiveness
+ * constraint, so a new type omitted here does not break the build — it falls
+ * through `shouldSendEmail`'s `emailActivity ?? true` and a recipient with
+ * activity email switched OFF gets no email at all. Every other widening in this
+ * module is compile-enforced; this one is enforced by review only.
+ *
+ * The ADM additions and why each qualifies (ADM-12, ADM-13e):
+ *   dispute.opened      YES — under ADM-11 the seller's available balance drops
+ *                       the moment a dispute opens. Money leaves their reachable
+ *                       balance through an action they did not initiate, which
+ *                       is this set's own stated criterion.
+ *   dispute.resolved    YES — in the refunded case money moves and the recipient
+ *                       did not initiate it. Same criterion.
+ *   listing.removed     YES — not a money event, but an enforcement action the
+ *                       seller can discover no other way, which is ADM-13's
+ *                       entire premise. Leaving it suppressible would silently
+ *                       undo the ruling for exactly the sellers least likely to
+ *                       be logged in.
+ *   dispute.under_review NO — buyer-facing, nothing moves, ordinary process
+ *                       mail. The only one of the four left out (ADM-12).
+ */
 const TRANSACTIONAL: ReadonlySet<NotificationType> = new Set([
 	'order.paid',
 	'payout.sent',
-	'boost.activated'
+	'boost.activated',
+	'dispute.opened',
+	'dispute.resolved',
+	'listing.removed'
 ]);
 
 export function isTransactional(type: NotificationType): boolean {
@@ -81,14 +106,36 @@ const DEDUPE_SOURCE = {
 	'review.received': 'orderId',
 	'review.response': 'reviewId',
 	'boost.activated': 'boostId',
-	'boost.expiring_24h': 'boostId'
+	'boost.expiring_24h': 'boostId',
+	// ADM-12 — the DISPUTE, not the order: an order can carry more than one
+	// dispute over its life (one at a time, per ADM-1's partial unique index), so
+	// keying on the order would collapse a second dispute into the first one's
+	// notification.
+	'dispute.opened': 'disputeId',
+	'dispute.under_review': 'disputeId',
+	'dispute.resolved': 'disputeId',
+	// ADM-13b — the AUDIT ROW, not the listing. `createNotification` inserts with
+	// ignoreDuplicates, so a listing id would mean takedown → restore → takedown
+	// silently discards the second notification, reproducing the exact dead end
+	// ADM-13 exists to prevent. A dispute id is single-lifecycle; a listing id is
+	// not. The audit row id is unique per takedown and ties the notification to
+	// its admin_actions record.
+	'listing.removed': 'adminActionId'
 } as const satisfies Record<NotificationType, keyof NotificationSourceIds>;
 
+/**
+ * The id each type keys idempotency on — NOT the same type as
+ * `NotificationPayload`, and widening one does not widen the other. This never
+ * reaches the renderer; it exists only so `dedupeKeyFor` can derive a stable
+ * key.
+ */
 export interface NotificationSourceIds {
 	orderId?: string;
 	reviewId?: string;
 	boostId?: string;
 	payoutId?: string;
+	disputeId?: string;
+	adminActionId?: string;
 }
 
 /**

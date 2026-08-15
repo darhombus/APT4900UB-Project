@@ -5,11 +5,19 @@
 		Badge,
 		Button,
 		Card,
+		Label,
 		Price,
 		Stars,
 		StarRatingInput,
 		Textarea
 	} from '$lib/components/ui';
+	import {
+		DISPUTE_REASON_MAX,
+		DISPUTE_REASON_MIN,
+		disputeStatusView,
+		disputeSummary,
+		disputeTimeline
+	} from '$lib/disputes';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
 	import {
 		centsToMajor,
@@ -58,6 +66,32 @@
 			cancelling = false;
 		};
 	};
+
+	let disputing = $state(false);
+	const onOpenDispute: SubmitFunction = () => {
+		disputing = true;
+		return async ({ result, update }) => {
+			await update();
+			notifyFromResult(result, { redirect: 'Reported. Our team will look into it.' });
+			disputing = false;
+		};
+	};
+
+	/*
+	 * THE REPORT PANEL'S <details> IS DELIBERATELY UNCONTROLLED — no `open`
+	 * expression and no `bind:open`, matching the Confirm receipt panel above,
+	 * which has never had this problem.
+	 *
+	 * Both controlled forms lose a race with hydration. The buyer's click opens
+	 * the element NATIVELY, before hydration; Svelte then mounts, applies its own
+	 * initial value (`false`), and the panel snaps shut with the buyer's text
+	 * still in it. `bind:open` does not fix it — binding still writes the rune's
+	 * initial value to the DOM on mount. Letting the browser own the element
+	 * removes the second writer entirely.
+	 *
+	 * A refused submit is still visible: the error Alert renders OUTSIDE the
+	 * <details>, and the textarea keeps what was typed via its `value`.
+	 */
 
 	// Reviews (Sections 4 and 5). The review area only exists on a completed
 	// order; `canReview` decides form vs read-only, and a hidden review takes a
@@ -291,6 +325,99 @@
 								class="w-full sm:w-auto"
 							>
 								Remove review
+							</Button>
+						</form>
+					</div>
+				</details>
+			{/if}
+		</Card>
+	{/if}
+
+	<!-- Disputes (ADM-1). Shown when there is one to show, or when one can be
+	     opened — never as an empty panel on an order nothing can happen to. -->
+	{#if data.disputes.length > 0 || data.canOpenDispute}
+		<Card class="mt-4 p-4">
+			<h2 class="text-sm font-semibold text-ink">Problem with this order</h2>
+
+			{#if form?.disputeError}
+				<Alert variant="error" class="mt-3">{form.disputeError}</Alert>
+			{/if}
+
+			{#each data.disputes as dispute (dispute.id)}
+				{@const view = disputeStatusView(dispute.status)}
+				<div class="mt-3 rounded-card border border-border p-3">
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<Badge variant={view.variant}>{view.label}</Badge>
+						<p class="text-xs text-subtle">
+							Reported {dateTimeFmt.format(new Date(dispute.created_at))}
+						</p>
+					</div>
+
+					<p class="mt-2 text-sm text-muted">{disputeSummary(dispute.status, 'buyer')}</p>
+
+					<!-- The buyer's own words, read back. Whitespace preserved and
+					     rendered as text — never as markup. -->
+					<p class="mt-3 text-xs font-medium text-subtle">What you reported</p>
+					<p class="mt-1 text-sm whitespace-pre-wrap text-muted">{dispute.reason}</p>
+
+					{#if dispute.resolution_note}
+						<p class="mt-3 text-xs font-medium text-subtle">Our decision</p>
+						<p class="mt-1 text-sm whitespace-pre-wrap text-muted">{dispute.resolution_note}</p>
+					{/if}
+
+					<ol class="mt-3 space-y-2">
+						{#each disputeTimeline(dispute) as step (step.label)}
+							<li class="flex items-start gap-3">
+								<span
+									class={`mt-1.5 h-2 w-2 flex-none rounded-pill ${step.done ? 'bg-brand' : 'bg-border'}`}
+									aria-hidden="true"
+								></span>
+								<div>
+									<p class={`text-sm ${step.done ? 'font-medium text-ink' : 'text-subtle'}`}>
+										{step.label}
+									</p>
+									{#if step.at}
+										<p class="text-xs text-subtle">{dateTimeFmt.format(new Date(step.at))}</p>
+									{/if}
+								</div>
+							</li>
+						{/each}
+					</ol>
+				</div>
+			{/each}
+
+			{#if data.canOpenDispute}
+				<!-- A native <details>, matching Confirm receipt above: reporting a
+				     problem is a deliberate second action, and this works with
+				     JavaScript off. -->
+				<details class="mt-3 rounded-card border border-border">
+					<summary
+						class="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden"
+					>
+						{data.disputes.length > 0 ? 'Report another problem' : 'Report a problem'}
+					</summary>
+					<div class="border-t border-border px-4 py-3">
+						<p class="text-sm text-muted">
+							Tell us what went wrong and our team will look into it. The seller is told that you
+							have reported a problem, and their payment for this order is held until it is settled.
+						</p>
+						<form method="POST" action="?/openDispute" use:enhance={onOpenDispute} class="mt-3">
+							<Label for="reason">What went wrong?</Label>
+							<Textarea
+								id="reason"
+								name="reason"
+								rows={4}
+								required
+								minlength={DISPUTE_REASON_MIN}
+								maxlength={DISPUTE_REASON_MAX}
+								value={form?.disputeReason ?? ''}
+								placeholder="For example: the item never arrived, or it was not what was described."
+							/>
+							<p class="mt-1 text-xs text-subtle">
+								At least {DISPUTE_REASON_MIN} characters.
+							</p>
+							<Button type="submit" loading={disputing} class="mt-3 w-full sm:w-auto">
+								Report the problem
 							</Button>
 						</form>
 					</div>
