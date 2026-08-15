@@ -89,9 +89,44 @@
 			</div>
 		</Card>
 	{:else}
-		<Card class="mt-6 flex items-baseline justify-between gap-4 p-4">
-			<span class="text-sm text-muted">Earned from completed orders</span>
-			<Price amount={centsToMajor(data.completedNet)} size="lg" />
+		<Card class="mt-6 p-4">
+			<div class="flex items-baseline justify-between gap-4">
+				<span class="text-sm text-muted">Earned from completed orders</span>
+				<Price amount={centsToMajor(data.completedNet)} size="lg" />
+			</div>
+
+			<!-- ADM-15. The withheld money is NAMED rather than silently missing from
+			     the total above. A figure that shrinks with no explanation is the dead
+			     end ADM-13 exists to prevent, and it would land here: a seller would
+			     see a smaller number and no reason for it.
+			     `held` is temporary and will resolve; `refunded` is final. They are
+			     separate lines because the seller is owed different words. -->
+			{#if data.heldNet > 0 || data.refundedNet > 0}
+				<dl class="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
+					{#if data.heldNet > 0}
+						<div class="flex items-baseline justify-between gap-4">
+							<dt class="text-muted">On hold while a problem is settled</dt>
+							<dd class="text-ink"><Price amount={centsToMajor(data.heldNet)} size="sm" /></dd>
+						</div>
+					{/if}
+					{#if data.refundedNet > 0}
+						<div class="flex items-baseline justify-between gap-4">
+							<dt class="text-muted">Refunded to buyers</dt>
+							<dd class="text-ink"><Price amount={centsToMajor(data.refundedNet)} size="sm" /></dd>
+						</div>
+					{/if}
+				</dl>
+				<p class="mt-2 text-xs text-subtle">
+					{#if data.heldNet > 0 && data.refundedNet > 0}
+						Money on hold is added back if the problem is settled in your favour. Refunded money has
+						gone back to the buyer and is not paid out.
+					{:else if data.heldNet > 0}
+						This is added back to your earnings if the problem is settled in your favour.
+					{:else}
+						This has gone back to the buyer and is not paid out.
+					{/if}
+				</p>
+			{/if}
 		</Card>
 		<!-- N2 — this is lifetime earnings; /sell/payouts shows what is withdrawable
 		     TODAY, which is smaller once the hold and past payouts are taken off. The

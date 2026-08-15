@@ -11,11 +11,35 @@ export const load: PageServerLoad = async ({ locals: { session } }) => {
 };
 
 /** Only allow same-site, absolute-path redirect targets (no protocol-relative).
- *  With no target, land on the browse/listings page (the home grid) — a user
- *  bounced here from a protected page keeps returning there via `redirectTo`. */
-function safeRedirect(target: string | null): string {
+ *  Returns null when there is no usable target, which is what lets the caller
+ *  choose a landing page by role instead (ADM-14). */
+function safeRedirect(target: string | null): string | null {
 	if (target && target.startsWith('/') && !target.startsWith('//')) return target;
-	return '/';
+	return null;
+}
+
+/**
+ * Where a login with NO usable `redirectTo` lands (ADM-14).
+ *
+ * ⚠️ THIS IS THE FALLBACK ONLY. `redirectTo` always wins, and that ordering is
+ * the whole ruling: ADM-9 sends an anonymous request for a deep admin route to
+ * `/login?redirectTo=<encoded path AND query>`, and the probe battery asserts
+ * that contract on all three tiers. An unconditional admin redirect would
+ * silently discard it — an admin following a link to one dispute would land on
+ * the overview instead, and the ADM-9 guarantee would be worth nothing for
+ * exactly the role it exists to serve.
+ *
+ * Display-layer only. It changes where an admin is POINTED, never what they may
+ * reach: the /admin gate is still requireRole(..., { hide: true }), and an
+ * admin's /sell/* access is untouched (ADM-2 scope note).
+ *
+ * A REJECTED target is treated as no target. `//evil.com` and a missing field
+ * both mean "no usable destination", so both fall through to the role default
+ * rather than one of them landing an admin somewhere different.
+ */
+async function landingFor(supabase: App.Locals['supabase'], userId: string): Promise<string> {
+	const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
+	return data?.role === 'admin' ? '/admin' : '/';
 }
 
 export const actions: Actions = {
@@ -33,7 +57,7 @@ export const actions: Actions = {
 			return fail(400, { errors: fieldErrors(parsed.error), values: { email: raw.email } });
 		}
 
-		const { error } = await supabase.auth.signInWithPassword(parsed.data);
+		const { data: signIn, error } = await supabase.auth.signInWithPassword(parsed.data);
 		if (error) {
 			const unverified = error.code === 'email_not_confirmed';
 			return fail(400, {
@@ -45,7 +69,13 @@ export const actions: Actions = {
 			});
 		}
 
-		redirect(303, safeRedirect(String(form.get('redirectTo') ?? '')));
+		// redirectTo FIRST, and only then the role default — the ADM-14 ordering.
+		const requested = safeRedirect(String(form.get('redirectTo') ?? ''));
+		if (requested) redirect(303, requested);
+
+		// The role read is deliberately AFTER the redirectTo check, so the ordinary
+		// deep-link path costs no extra query at all.
+		redirect(303, signIn.user ? await landingFor(supabase, signIn.user.id) : '/');
 	},
 
 	resend: async ({ request, url, locals: { supabase } }) => {

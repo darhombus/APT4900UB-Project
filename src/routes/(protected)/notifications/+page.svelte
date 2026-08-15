@@ -3,29 +3,36 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { Button, Card } from '$lib/components/ui';
 	import { notificationCount as notificationCountStore } from '$lib/notification-count.svelte';
-	import type { NotificationIcon } from '$lib/notifications';
+	import type { NotificationTone } from '$lib/notifications';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	/**
-	 * Tint by what the notification is ABOUT, not by type:
-	 *   brand   — money moved (payment in, payout out)
-	 *   neutral — an order moved through its lifecycle, disputes included
-	 *   accent  — attention on a listing's reputation or visibility
-	 *   error   — an enforcement action against the seller (ADM-8 'moderation')
-	 * Eleven types, four tones, so the list is scannable before it is read.
+	 * Tint by what the notification MEANS for the person reading it (ADM-16).
 	 *
-	 * `moderation` is the only tone that is not shared: a takedown is the one
-	 * event here the recipient did not cause and cannot undo, and tinting it like
-	 * a boost or a review would bury exactly the row a seller most needs to see.
+	 *   brand   — money moved (payment in, payout out)
+	 *   neutral — something moved through its lifecycle; nothing decided yet
+	 *   accent  — attention on a listing's reputation or visibility
+	 *   success — a decision that went the reader's way
+	 *   warning — a decision that went against them
+	 *   error   — an enforcement action against them (ADM-8 'moderation')
+	 *
+	 * KEYED ON TONE, NOT ON THE ICON, and that separation is the fix. The icon is
+	 * the CATEGORY and ADM-8 fixed all three dispute types to `order`, so a
+	 * tone read off the icon gave one `dispute.resolved` colour to four different
+	 * meanings — telling a seller they had lost when they had won.
+	 *
+	 * `Record<NotificationTone, string>` is what makes this compile-enforced: a
+	 * new tone breaks the build here rather than rendering untinted.
 	 */
-	const TONES: Record<NotificationIcon, string> = {
+	const TONES: Record<NotificationTone, string> = {
 		money: 'bg-brand-tint text-brand-strong',
-		order: 'bg-neutral-tint text-neutral-strong',
-		review: 'bg-accent-tint text-accent-strong',
-		boost: 'bg-accent-tint text-accent-strong',
-		moderation: 'bg-error-tint text-error-strong'
+		neutral: 'bg-neutral-tint text-neutral-strong',
+		accent: 'bg-accent-tint text-accent-strong',
+		positive: 'bg-success-tint text-success-strong',
+		adverse: 'bg-warning-tint text-warning-strong',
+		enforcement: 'bg-error-tint text-error-strong'
 	};
 
 	// Opening a notification is one fewer unread, so the badge should not wait for
@@ -104,7 +111,7 @@
 						>
 							<span
 								aria-hidden="true"
-								class={`flex h-9 w-9 flex-none items-center justify-center rounded-control ${TONES[n.icon]}`}
+								class={`flex h-9 w-9 flex-none items-center justify-center rounded-control ${TONES[n.tone]}`}
 							>
 								<svg class="h-4.5 w-4.5" viewBox="0 0 20 20" fill="none">
 									{#if n.icon === 'money'}

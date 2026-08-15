@@ -5,6 +5,7 @@ import {
 	notificationCopy,
 	notificationHref,
 	notificationIcon,
+	notificationTone,
 	type NotificationPayload
 } from '$lib/notifications';
 import { relativeTime } from '$lib/relative-time';
@@ -43,6 +44,10 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				body: copy.body,
 				href: notificationHref(row.type, payload),
 				icon: notificationIcon(row.type),
+				// ADM-16: a SECOND axis. The icon is the category (ADM-8 fixes all
+				// three dispute types to `order`); the tone carries role + outcome,
+				// which the icon deliberately cannot.
+				tone: notificationTone(row.type, payload),
 				unread: row.read_at === null,
 				createdAt: row.created_at,
 				age: relativeTime(row.created_at, now)

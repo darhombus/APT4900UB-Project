@@ -26,6 +26,10 @@
 	// (listings, sales, payouts) but cannot create listings (BST-19), so the
 	// create affordance must not be offered to them.
 	const canCreateListing = $derived(data.canCreateListing);
+	// ADM-14. Which navigation an admin is SHOWN — not what they may reach.
+	// /admin is gated by requireRole(..., { hide: true }); admins keep their
+	// /sell/* access by URL (ADM-2) and simply are not pointed there.
+	const isAdmin = $derived(data.isAdmin);
 	const categoryTree = $derived(data.categoryTree);
 
 	// Unread-conversation badge (D5). Seeded from the server-computed layout value
@@ -481,7 +485,14 @@
 									</a>
 									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
 									<a href="/account/orders" class={menuItem} onclick={closeMenu}>Orders</a>
-									{#if isSeller}
+									{#if isAdmin}
+										<!-- ADM-14: admin navigation INSTEAD OF seller navigation. An
+										     admin does not sell, so My listings / Sales / Payouts are
+										     three dead ends for them. Their /sell/* access is untouched
+										     (ADM-2) — they are simply not pointed at it. The absence of
+										     this entry is what prompted the ruling. -->
+										<a href="/admin" class={menuItem} onclick={closeMenu}>Admin dashboard</a>
+									{:else if isSeller}
 										<a href="/sell/listings" class={menuItem} onclick={closeMenu}>My listings</a>
 										<!-- Sellers only: /sell/sales would bounce a buyer to onboarding,
 										     so don't offer it to them at all. No counter — that's
@@ -555,6 +566,7 @@
 			{categoryTree}
 			loggedIn={!!session}
 			{isSeller}
+			{isAdmin}
 			{profile}
 			{unreadCount}
 			{notificationCount}
