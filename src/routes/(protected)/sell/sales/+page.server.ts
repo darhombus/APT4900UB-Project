@@ -116,12 +116,49 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 		}
 	}
 
+	// Disputes on these sales (ADM-1). Read through the SESSION client:
+	// disputes_select admits the seller via `dispute_party(order_id)`, which
+	// covers both parties on the order — so a seller sees disputes on their own
+	// sales without any service-role read.
+	//
+	// The seller has no per-order detail route, so this list IS the seller's
+	// dispute view. One query for the whole page rather than one per row.
+	const { data: disputeRows } =
+		rows.length > 0
+			? await supabase
+					.from('disputes')
+					.select('id, order_id, status, reason, resolution_note, created_at, resolved_at')
+					.in(
+						'order_id',
+						rows.map((o) => o.id)
+					)
+					.order('created_at', { ascending: false })
+			: { data: [] };
+
+	// Newest first from the query, and only the first per order is kept — the
+	// live one when there is one, otherwise the most recent settled one.
+	const disputeByOrder = new Map<string, NonNullable<typeof disputeRows>[number]>();
+	for (const d of disputeRows ?? []) {
+		if (!disputeByOrder.has(d.order_id)) disputeByOrder.set(d.order_id, d);
+	}
+
 	const sales = rows.map((o) => {
 		// The embed when RLS allowed it, the service-role recovery when it did not.
 		const listing = o.listings ?? recovered.get(o.listing_id) ?? null;
+		const dispute = disputeByOrder.get(o.id) ?? null;
 		return {
 			id: o.id,
 			status: o.status,
+			dispute: dispute
+				? {
+						id: dispute.id,
+						status: dispute.status,
+						reason: dispute.reason,
+						resolutionNote: dispute.resolution_note,
+						createdAt: dispute.created_at,
+						resolvedAt: dispute.resolved_at
+					}
+				: null,
 			amountTotal: o.amount_total,
 			commissionAmount: o.commission_amount,
 			sellerNet: o.seller_net,

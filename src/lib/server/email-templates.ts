@@ -189,9 +189,27 @@ function subjectFor(type: NotificationType, payload: NotificationPayload, title:
 			return item ? `Boost active: ${item}` : 'Your boost is live';
 		case 'boost.expiring_24h':
 			return item ? `Boost ending tomorrow: ${item}` : 'Your boost ends tomorrow';
+
+		// ADM-8 / ADM-13. NOT in the PRD's ten-location widening list, and the
+		// `default` below means omitting them would have shipped silently with the
+		// in-app title as the subject — the same failure shape as TRANSACTIONAL,
+		// in a fourth file.
+		case 'dispute.opened':
+			return item ? `A buyer opened a dispute: ${item}` : 'A buyer opened a dispute';
+		case 'dispute.under_review':
+			return 'Your dispute is being reviewed';
+		case 'dispute.resolved':
+			return payload.disputeOutcome === 'refunded'
+				? payload.role === 'seller'
+					? 'A dispute was settled with a refund'
+					: 'Your refund is on its way'
+				: 'Your dispute was closed';
+		case 'listing.removed':
+			return item ? `Listing taken down: ${item}` : 'Your listing was taken down';
+
 		default:
-			// Unreachable — the union is closed. Present so a future eighth event
-			// cannot ship with an empty subject if someone forgets this switch.
+			// Unreachable — the union is closed. Present so a future event cannot
+			// ship with an empty subject if someone forgets this switch.
 			return title;
 	}
 }

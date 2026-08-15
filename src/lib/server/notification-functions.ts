@@ -20,7 +20,11 @@ import {
 import type { NotificationPayload, NotificationType } from '$lib/notifications';
 import {
 	boostActivated,
+	disputeOpened,
+	disputeResolved,
+	disputeUnderReview,
 	inngest,
+	listingRemoved,
 	orderCompleted,
 	orderPaid,
 	payoutSent,
@@ -126,6 +130,74 @@ async function loadOrder(admin: Admin, orderId: string): Promise<OrderContext | 
 		listingId: data.listing_id,
 		listingTitle: embeddedTitle(data.listings),
 		amount: Number(data.amount_total)
+	};
+}
+
+interface DisputeContext {
+	disputeId: string;
+	orderId: string;
+	buyerId: string;
+	sellerId: string;
+	listingId: string;
+	listingTitle: string | null;
+	status: string;
+	resolutionNote: string | null;
+}
+
+/**
+ * One dispute plus the order context its copy needs (ADM-8).
+ *
+ * The buyer and seller come from the ORDER, not from `disputes.opened_by`.
+ * ADM-1 makes those the same person today — only a buyer can open one — but the
+ * order is the authority on who the two parties are, and reading identity from
+ * the order means a future seller-initiated dispute would not silently notify
+ * the wrong side.
+ *
+ * `status` is read back rather than carried on the event so a replay describes
+ * the dispute as it stands, not as it was when the event was sent.
+ */
+async function loadDispute(admin: Admin, disputeId: string): Promise<DisputeContext | null> {
+	const { data, error } = await admin
+		.from('disputes')
+		.select('id, order_id, status, resolution_note, orders(buyer_id, seller_id, listing_id)')
+		.eq('id', disputeId)
+		.maybeSingle();
+
+	if (error) throw new Error(`notifications: dispute lookup failed: ${error.message}`);
+	if (!data) return null;
+
+	const order = data.orders as {
+		buyer_id?: unknown;
+		seller_id?: unknown;
+		listing_id?: unknown;
+	} | null;
+	if (!order || typeof order.buyer_id !== 'string' || typeof order.seller_id !== 'string') {
+		throw new Error(`notifications: dispute ${disputeId} has no readable order`);
+	}
+	const listingId = typeof order.listing_id === 'string' ? order.listing_id : null;
+
+	// A second read rather than a two-level embed: PostgREST can nest
+	// disputes→orders→listings, but the generated types flatten the grandchild to
+	// a shape the narrowing above cannot express cleanly, and a title is cheap.
+	let listingTitle: string | null = null;
+	if (listingId) {
+		const { data: listing } = await admin
+			.from('listings')
+			.select('title')
+			.eq('id', listingId)
+			.maybeSingle();
+		listingTitle = listing?.title ?? null;
+	}
+
+	return {
+		disputeId: data.id,
+		orderId: data.order_id,
+		buyerId: order.buyer_id,
+		sellerId: order.seller_id,
+		listingId: listingId ?? '',
+		listingTitle,
+		status: data.status,
+		resolutionNote: data.resolution_note
 	};
 }
 
@@ -678,6 +750,243 @@ export const notifyBoostExpiring = inngest.createFunction(
 		const emails = await emailRecipients(step, 'boost.expiring_24h', ids, recipients);
 
 		return { boostId, created, emails };
+	}
+);
+
+// ---------------------------------------------------------------------------
+// ADM-8 / ADM-13 — disputes and moderation
+// ---------------------------------------------------------------------------
+
+/**
+ * `disputes/dispute.opened` → seller (ADM-8).
+ *
+ * Single-party, so no `role` on the payload: only the seller is told. The buyer
+ * just performed the action and is looking at the confirmation.
+ *
+ * Idempotency on the dispute id mirrors notify-order-paid's: one run per
+ * dispute is the optimisation, never the guarantee — the unique constraint on
+ * (user_id, type, dedupe_key) is, and it holds for a replay outside Inngest's
+ * dedup window too.
+ */
+export const notifyDisputeOpened = inngest.createFunction(
+	{ id: 'notify-dispute-opened', idempotency: 'event.data.disputeId', triggers: [disputeOpened] },
+	async ({ event, step }) => {
+		const { disputeId } = event.data;
+		const admin = createSupabaseAdmin();
+
+		const dispute = await step.run('load-dispute', async () => loadDispute(admin, disputeId));
+		if (!dispute) {
+			console.error('[notifications] dispute.opened for unknown dispute %s', disputeId);
+			return { disputeId, outcome: 'unknown_dispute' };
+		}
+
+		const recipients: Recipient[] = [
+			{
+				userId: dispute.sellerId,
+				label: 'seller',
+				payload: {
+					disputeId: dispute.disputeId,
+					orderId: dispute.orderId,
+					listingId: dispute.listingId,
+					listingTitle: dispute.listingTitle ?? undefined
+				}
+			}
+		];
+		const ids = { disputeId: dispute.disputeId };
+
+		const created = await step.run('create-notifications', async () =>
+			createRows(admin, 'dispute.opened', ids, recipients)
+		);
+		const emails = await emailRecipients(step, 'dispute.opened', ids, recipients);
+
+		return { disputeId, created, emails };
+	}
+);
+
+/**
+ * `disputes/dispute.under_review` → buyer (ADM-8).
+ *
+ * The only one of the four ADM types that is NOT transactional: nothing has
+ * moved, this is a progress update, and a buyer who switched activity email off
+ * has said they do not want these (ADM-12).
+ */
+export const notifyDisputeUnderReview = inngest.createFunction(
+	{
+		id: 'notify-dispute-under-review',
+		idempotency: 'event.data.disputeId',
+		triggers: [disputeUnderReview]
+	},
+	async ({ event, step }) => {
+		const { disputeId } = event.data;
+		const admin = createSupabaseAdmin();
+
+		const dispute = await step.run('load-dispute', async () => loadDispute(admin, disputeId));
+		if (!dispute) {
+			console.error('[notifications] dispute.under_review for unknown dispute %s', disputeId);
+			return { disputeId, outcome: 'unknown_dispute' };
+		}
+
+		const recipients: Recipient[] = [
+			{
+				userId: dispute.buyerId,
+				label: 'buyer',
+				payload: {
+					disputeId: dispute.disputeId,
+					orderId: dispute.orderId,
+					listingId: dispute.listingId,
+					listingTitle: dispute.listingTitle ?? undefined
+				}
+			}
+		];
+		const ids = { disputeId: dispute.disputeId };
+
+		const created = await step.run('create-notifications', async () =>
+			createRows(admin, 'dispute.under_review', ids, recipients)
+		);
+		const emails = await emailRecipients(step, 'dispute.under_review', ids, recipients);
+
+		return { disputeId, created, emails };
+	}
+);
+
+/**
+ * `disputes/dispute.resolved` → buyer AND seller (ADM-8).
+ *
+ * TWO recipients off one event, so the `payload.role` discriminator carries the
+ * difference — the order.paid pattern (ADM-12). A refund reads as good news to
+ * one party and lost earnings to the other; one neutral message would serve
+ * neither.
+ *
+ * The outcome is derived from the dispute's CURRENT status rather than from the
+ * event, so a replay cannot announce an outcome that has since changed.
+ */
+export const notifyDisputeResolved = inngest.createFunction(
+	{
+		id: 'notify-dispute-resolved',
+		idempotency: 'event.data.disputeId',
+		triggers: [disputeResolved]
+	},
+	async ({ event, step }) => {
+		const { disputeId } = event.data;
+		const admin = createSupabaseAdmin();
+
+		const dispute = await step.run('load-dispute', async () => loadDispute(admin, disputeId));
+		if (!dispute) {
+			console.error('[notifications] dispute.resolved for unknown dispute %s', disputeId);
+			return { disputeId, outcome: 'unknown_dispute' };
+		}
+
+		// Terminal states only. An event that arrives while the dispute is still
+		// open or under review would describe a decision nobody made — loud, and
+		// terminal rather than retried, because retrying cannot change the row.
+		if (dispute.status !== 'resolved_refunded' && dispute.status !== 'resolved_rejected') {
+			console.error(
+				'[notifications] dispute.resolved for %s which is still %s',
+				disputeId,
+				dispute.status
+			);
+			return { disputeId, outcome: 'not_resolved' };
+		}
+
+		const shared = {
+			disputeId: dispute.disputeId,
+			orderId: dispute.orderId,
+			listingId: dispute.listingId,
+			listingTitle: dispute.listingTitle ?? undefined,
+			note: dispute.resolutionNote ?? undefined,
+			disputeOutcome: dispute.status === 'resolved_refunded' ? 'refunded' : 'rejected'
+		} satisfies NotificationPayload;
+		const recipients: Recipient[] = [
+			{ userId: dispute.buyerId, label: 'buyer', payload: { ...shared, role: 'buyer' } },
+			{ userId: dispute.sellerId, label: 'seller', payload: { ...shared, role: 'seller' } }
+		];
+		const ids = { disputeId: dispute.disputeId };
+
+		const created = await step.run('create-notifications', async () =>
+			createRows(admin, 'dispute.resolved', ids, recipients)
+		);
+		const emails = await emailRecipients(step, 'dispute.resolved', ids, recipients);
+
+		return { disputeId, created, emails };
+	}
+);
+
+/**
+ * `listings/listing.removed` → seller (ADM-13).
+ *
+ * Idempotency is keyed on the ADMIN ACTION id, not the listing id, and so is the
+ * notification's dedupe_key (ADM-13b). A listing id would mean takedown →
+ * restore → takedown silently discards the second notification — reproducing
+ * the exact silent dead end this ruling exists to prevent.
+ *
+ * The moderation note is read from the audit row rather than carried on the
+ * event, matching every other handler here: the event carries identifiers, the
+ * handler reads the source of truth.
+ */
+export const notifyListingRemoved = inngest.createFunction(
+	{
+		id: 'notify-listing-removed',
+		idempotency: 'event.data.adminActionId',
+		triggers: [listingRemoved]
+	},
+	async ({ event, step }) => {
+		const { listingId, adminActionId } = event.data;
+		const admin = createSupabaseAdmin();
+
+		const context = await step.run('load-listing', async () => {
+			const { data: listing, error: listingError } = await admin
+				.from('listings')
+				.select('id, seller_id, title, status')
+				.eq('id', listingId)
+				.maybeSingle();
+			if (listingError) {
+				throw new Error(`notifications: listing lookup failed: ${listingError.message}`);
+			}
+			if (!listing) return null;
+
+			const { data: action, error: actionError } = await admin
+				.from('admin_actions')
+				.select('id, detail')
+				.eq('id', adminActionId)
+				.maybeSingle();
+			if (actionError) {
+				throw new Error(`notifications: admin_action lookup failed: ${actionError.message}`);
+			}
+
+			const detail = (action?.detail ?? null) as { note?: unknown } | null;
+			const note = typeof detail?.note === 'string' ? detail.note.trim() : '';
+
+			return {
+				sellerId: listing.seller_id,
+				title: listing.title,
+				note: note.length > 0 ? note : null
+			};
+		});
+
+		if (!context) {
+			console.error('[notifications] listing.removed for unknown listing %s', listingId);
+			return { listingId, outcome: 'unknown_listing' };
+		}
+
+		const recipients: Recipient[] = [
+			{
+				userId: context.sellerId,
+				label: 'seller',
+				payload: {
+					listingId,
+					listingTitle: context.title,
+					note: context.note ?? undefined
+				}
+			}
+		];
+		const ids = { adminActionId };
+
+		const created = await step.run('create-notifications', async () =>
+			createRows(admin, 'listing.removed', ids, recipients)
+		);
+		const emails = await emailRecipients(step, 'listing.removed', ids, recipients);
+
+		return { listingId, adminActionId, created, emails };
 	}
 );
 

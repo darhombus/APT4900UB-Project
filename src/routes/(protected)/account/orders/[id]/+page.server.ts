@@ -3,9 +3,10 @@ import { createSupabaseAdmin } from '$lib/server/supabase-admin';
 import { cancelCheckout } from '$lib/server/checkout';
 import { findSpokenConversation } from '$lib/server/messaging';
 import { deleteReview, findReviewForOrder, insertReview } from '$lib/server/reviews';
-import { emitOrderCompleted } from '$lib/server/notification-events';
+import { emitDisputeOpened, emitOrderCompleted } from '$lib/server/notification-events';
 import { coverPath, publicUrl } from '$lib/listing-images';
 import { parseBody, parseRating } from '$lib/reviews';
+import { DISPUTE_ELIGIBLE_ORDER_STATUSES, isDisputeLive, parseDisputeReason } from '$lib/disputes';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -65,9 +66,34 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, user } 
 	// so rather than silently re-offering the form.
 	const review = order.status === 'completed' ? await findReviewForOrder(supabase, order.id) : null;
 
+	// Disputes (ADM-1). Read through the SESSION client: disputes_select admits
+	// the buyer twice over — `opened_by = auth.uid()` and `dispute_party(order_id)`
+	// — so no service-role read is needed to show someone their own dispute.
+	//
+	// Every dispute for this order, newest first, not just the live one: ADM-1
+	// allows a second dispute after the first is settled, and hiding the settled
+	// one would make the outcome the buyer was told about disappear.
+	const { data: disputeRows } = await supabase
+		.from('disputes')
+		.select('id, status, reason, resolution_note, created_at, resolved_at')
+		.eq('order_id', order.id)
+		.order('created_at', { ascending: false });
+
+	const disputes = disputeRows ?? [];
+	const liveDispute = disputes.find((d) => isDisputeLive(d.status)) ?? null;
+
 	return {
 		review,
 		canReview: order.status === 'completed' && review === null,
+		disputes,
+		/**
+		 * UX only — `open_dispute` re-checks the caller, the order status and the
+		 * one-live-per-order index, so a forged POST still fails. This flag exists
+		 * so the page does not offer a form that is certain to be refused.
+		 */
+		canOpenDispute:
+			(DISPUTE_ELIGIBLE_ORDER_STATUSES as readonly string[]).includes(order.status) &&
+			liveDispute === null,
 		order: {
 			id: order.id,
 			status: order.status,
@@ -147,6 +173,53 @@ export const actions: Actions = {
 		if (!result.ok) return fail(400, { reviewError: result.error });
 
 		// POST-redirect-get, matching confirmReceipt: a refresh must not re-submit.
+		redirect(303, `/account/orders/${params.id}`);
+	},
+
+	/**
+	 * ADM Section 6 — the buyer opens a dispute.
+	 *
+	 * THIS IS `open_dispute`'S FIRST CALLER. The RPC has held an `authenticated`
+	 * EXECUTE grant since the Section 4 push with nothing in the app able to
+	 * reach it; this action closes that window.
+	 *
+	 * The reason is validated here so a short one comes back inline rather than
+	 * as a raw CHECK violation, but the RPC re-checks it — along with the caller
+	 * being the order's buyer, the order being in a disputable state, and the
+	 * one-live-dispute index. Nothing here is the enforcement.
+	 */
+	openDispute: async ({ params, request, locals: { supabase } }) => {
+		const form = await request.formData();
+		const reason = parseDisputeReason(form.get('reason'));
+		if (!reason.ok) {
+			return fail(400, { disputeError: reason.error, disputeReason: reason.value });
+		}
+
+		const { data: disputeId, error: rpcError } = await supabase.rpc('open_dispute', {
+			p_order_id: params.id,
+			p_reason: reason.value
+		});
+
+		if (rpcError) {
+			// Assert on the CLASS, never on the RPC's own message token — those are
+			// for logs. 42501 is authorization, P0002 an absent order, P0001 a rule.
+			return fail(400, {
+				disputeError:
+					rpcError.code === '42501'
+						? 'You can only report a problem on your own order.'
+						: rpcError.code === 'P0002'
+							? 'That order could not be found.'
+							: 'This order cannot be disputed right now. Reload to see its current state.',
+				disputeReason: reason.value
+			});
+		}
+
+		// After the RPC succeeded, so a refused dispute notifies nobody — and
+		// failure to emit must not fail the action: the dispute IS open at this
+		// point, and a missing notification is not worth an error page.
+		if (typeof disputeId === 'string') await emitDisputeOpened(disputeId);
+
+		// POST-redirect-get so a refresh can't re-submit.
 		redirect(303, `/account/orders/${params.id}`);
 	},
 

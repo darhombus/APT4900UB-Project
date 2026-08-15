@@ -3,6 +3,7 @@
 	import { Alert, Badge, Button, Card, Price, Stars, Textarea } from '$lib/components/ui';
 	import { ReviewByline } from '$lib/components';
 	import { PLACEHOLDER_IMAGE } from '$lib/listing-images';
+	import { disputeStatusView, disputeSummary } from '$lib/disputes';
 	import { centsToMajor, orderStatusLabel, orderStatusVariant } from '$lib/orders';
 	import { REVIEW_RESPONSE_MAX, averageRating, reviewCountLabel } from '$lib/reviews';
 	import { notifyFromResult } from '$lib/toast.svelte';
@@ -16,6 +17,8 @@
 		month: 'short',
 		year: 'numeric'
 	});
+
+	type Dispute = NonNullable<PageData['sales'][number]['dispute']>;
 
 	// Section 6. One reply per review, ever (D5) — a review either shows the
 	// seller's reply or the form to write it, never both and never an edit.
@@ -39,6 +42,41 @@
 </script>
 
 <svelte:head><title>Your sales · MySoko</title></svelte:head>
+
+<!--
+	The seller's dispute view (ADM-1, Section 6). One snippet, two render sites:
+	this page renders its sales TWICE — cards below sm, a table above — and the
+	seller has no per-order detail route, so this list is the only place a seller
+	can see a dispute at all. Read-only: ADM-1 makes disputes buyer-initiated and
+	ADM-7 makes every transition RPC-only, so there is nothing here for a seller
+	to act on. Saying so plainly beats offering a control that would be refused.
+-->
+{#snippet disputePanel(dispute: Dispute)}
+	{@const view = disputeStatusView(dispute.status)}
+	<div class="mt-3 rounded-card border border-error/30 bg-error-tint/40 p-3">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<span class="text-xs font-medium text-ink">Problem reported</span>
+			<Badge variant={view.variant}>{view.label}</Badge>
+		</div>
+
+		<p class="mt-2 text-sm text-muted">{disputeSummary(dispute.status, 'seller')}</p>
+
+		<!-- The buyer's own words, rendered as TEXT. Never markup. -->
+		<p class="mt-2 text-sm whitespace-pre-wrap text-muted">“{dispute.reason}”</p>
+
+		{#if dispute.resolutionNote}
+			<p class="mt-2 text-xs font-medium text-subtle">Our decision</p>
+			<p class="mt-1 text-sm whitespace-pre-wrap text-muted">{dispute.resolutionNote}</p>
+		{/if}
+
+		<p class="mt-2 text-xs text-subtle">
+			Reported {dateFmt.format(new Date(dispute.createdAt))}
+			{#if dispute.resolvedAt}
+				· settled {dateFmt.format(new Date(dispute.resolvedAt))}
+			{/if}
+		</p>
+	</div>
+{/snippet}
 
 <main class="mx-auto max-w-4xl px-4 py-6 sm:py-8">
 	<h1 class="font-display text-2xl font-bold text-ink">Your sales</h1>
@@ -109,6 +147,9 @@
 								</dd>
 							</div>
 						</dl>
+						{#if sale.dispute}
+							{@render disputePanel(sale.dispute)}
+						{/if}
 					</Card>
 				</li>
 			{/each}
@@ -161,6 +202,16 @@
 								</Badge>
 							</td>
 						</tr>
+						{#if sale.dispute}
+							<!-- A full-width row beneath its sale rather than a column: the
+							     buyer's words and the decision are prose, and prose does not
+							     fit a table cell sized for a price. -->
+							<tr class="border-b border-border last:border-0">
+								<td colspan="7" class="pb-3">
+									{@render disputePanel(sale.dispute)}
+								</td>
+							</tr>
+						{/if}
 					{/each}
 				</tbody>
 			</table>

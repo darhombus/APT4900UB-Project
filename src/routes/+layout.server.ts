@@ -25,6 +25,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 
 	let profile: { full_name: string; avatar_url: string | null } | null = null;
 	let isSeller = false;
+	let canCreateListing = false;
 	let unreadCount = 0;
 	let notificationCount = 0;
 	if (session && user) {
@@ -46,6 +47,11 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 		if (data) {
 			profile = { full_name: data.full_name, avatar_url: data.avatar_url };
 			isSeller = data.role === 'seller' || data.role === 'admin';
+			// BST-19/BST-20: listing creation is a seller capability only, so the
+			// affordance needs its own signal. `isSeller` stays exactly as it is —
+			// it gates ENTRY to /sell (listings, sales, payouts), which admins keep
+			// (ADM-2 scope note). This gates the CREATE button, which they do not.
+			canCreateListing = data.role === 'seller';
 			// Prime the request-scoped role cache so the /sell guard reuses this fetch
 			// instead of issuing its own profile query.
 			locals.roleCache = Promise.resolve(data.role);
@@ -62,6 +68,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 		user,
 		profile,
 		isSeller,
+		canCreateListing,
 		unreadCount,
 		notificationCount,
 		categoryTree: await categoriesPromise,

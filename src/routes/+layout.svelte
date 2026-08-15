@@ -22,6 +22,10 @@
 	let { session, supabase } = $derived(data);
 	const profile = $derived(data.profile);
 	const isSeller = $derived(data.isSeller);
+	// BST-20. Distinct from `isSeller` on purpose: admins keep /sell entry
+	// (listings, sales, payouts) but cannot create listings (BST-19), so the
+	// create affordance must not be offered to them.
+	const canCreateListing = $derived(data.canCreateListing);
 	const categoryTree = $derived(data.categoryTree);
 
 	// Unread-conversation badge (D5). Seeded from the server-computed layout value
@@ -370,7 +374,7 @@
 
 					<div class="flex flex-none items-center gap-1">
 						{#if session}
-							{#if isSeller}
+							{#if canCreateListing}
 								<a
 									href="/sell/listings/new"
 									class="hidden h-10 items-center gap-1.5 rounded-control bg-white px-3 text-sm font-semibold text-brand-strong transition-colors hover:bg-white/90 sm:inline-flex"
