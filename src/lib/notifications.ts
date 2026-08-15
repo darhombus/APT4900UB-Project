@@ -357,3 +357,71 @@ export function notificationIcon(type: NotificationType): NotificationIcon {
 			return 'moderation';
 	}
 }
+
+/**
+ * The TINT a notification is rendered in (ADM-16).
+ *
+ * A SEPARATE AXIS FROM THE ICON, and it has to be. The icon is the CATEGORY —
+ * ADM-8 fixed the three dispute types to the `order` glyph because disputes are
+ * order-anchored, and that ruling stands. But `dispute.resolved` is one event
+ * with four meanings, and colour is what carries the difference:
+ *
+ *     seller + refunded  adverse    the buyer's money went back; earnings lost
+ *     seller + rejected  positive   the claim did not stand; the hold lifts
+ *     buyer  + refunded  positive   the refund is coming
+ *     buyer  + rejected  adverse    no refund
+ *
+ * Before this, tone was read straight off the icon, so all four rendered the
+ * SAME tint — telling a seller they had lost when they had won. Deriving tone
+ * from the icon cannot express this: the icon is deliberately the same for all
+ * four, which is the whole point of ADM-8's collapse to few shapes.
+ *
+ * Exhaustive over the closed union with no `default`, so a twelfth type is a
+ * compile error here rather than a silent fall-through to a wrong colour —
+ * the failure mode ADM-16 exists to fix.
+ */
+export type NotificationTone =
+	'money' | 'neutral' | 'accent' | 'positive' | 'adverse' | 'enforcement';
+
+export function notificationTone(
+	type: NotificationType,
+	payload: NotificationPayload
+): NotificationTone {
+	switch (type) {
+		case 'order.paid':
+		case 'payout.sent':
+			return 'money';
+
+		// Nothing has been decided in any of these, so none is good news or bad.
+		// dispute.opened is left neutral deliberately: the seller's money is
+		// withheld, but no outcome has been reached, and colouring it adverse would
+		// pre-judge a claim that may well be rejected.
+		//
+		// (The comment sits ABOVE the group rather than between two `case` labels —
+		// ESLint's no-fallthrough reads an interleaved comment as a missing
+		// `break`.)
+		case 'order.completed':
+		case 'dispute.opened':
+		case 'dispute.under_review':
+			return 'neutral';
+
+		case 'dispute.resolved': {
+			const refunded = payload.disputeOutcome === 'refunded';
+			// The role/outcome matrix. `role` alone would invert half of it, and
+			// `outcome` alone would tell both parties the same thing.
+			if (payload.role === 'seller') return refunded ? 'adverse' : 'positive';
+			return refunded ? 'positive' : 'adverse';
+		}
+
+		case 'review.received':
+		case 'review.response':
+		case 'boost.activated':
+		case 'boost.expiring_24h':
+			return 'accent';
+
+		// An enforcement action against the recipient — its own tone, kept distinct
+		// from `adverse` so a takedown never reads as merely a bad outcome.
+		case 'listing.removed':
+			return 'enforcement';
+	}
+}
