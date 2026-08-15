@@ -1,5 +1,6 @@
 import {
 	inngest,
+	listingRemoved,
 	orderCompleted,
 	payoutSent,
 	reviewReceived,
@@ -67,4 +68,22 @@ export async function emitReviewResponse(reviewId: string): Promise<void> {
  */
 export async function emitPayoutSent(payoutId: string): Promise<void> {
 	await emit(`payout.sent(${payoutId})`, () => inngest.send(payoutSent.create({ payoutId })));
+}
+
+/**
+ * An admin took a listing down (ADM-13).
+ *
+ * The database emits nothing — it has no outbound HTTP — so
+ * admin_set_listing_visibility RETURNS (seller_id, prior_status,
+ * admin_action_id, note) and the /admin/listings takedown action calls this
+ * with the identifiers. Restore is deliberately silent: the listing reappears
+ * at its prior status, which is self-evident to its seller.
+ *
+ * The handler lands in Section 6. Until it does this event has no subscriber,
+ * which is harmless — Inngest accepts and drops it.
+ */
+export async function emitListingRemoved(listingId: string, adminActionId: string): Promise<void> {
+	await emit(`listing.removed(${listingId})`, () =>
+		inngest.send(listingRemoved.create({ listingId, adminActionId }))
+	);
 }

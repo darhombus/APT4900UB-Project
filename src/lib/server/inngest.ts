@@ -156,6 +156,23 @@ export const reviewResponse = eventType('review/response', {
 	schema: staticSchema<{ reviewId: string }>()
 });
 
+/**
+ * An admin took a listing down (ADM-13).
+ *
+ * Identifiers only, like every other event here: the Section 6 handler reads
+ * the admin_actions row for the moderation note and the listing for its seller
+ * rather than trusting a payload. `adminActionId` is also the notification's
+ * dedupe key (ADM-13b) — the listing id would collapse a second takedown of the
+ * same listing into the first one's notification.
+ *
+ * Emitted from the /admin/listings takedown action, never from SQL: the database
+ * has no outbound HTTP, so admin_set_listing_visibility returns what the action
+ * needs and the action sends this.
+ */
+export const listingRemoved = eventType('listings/listing.removed', {
+	schema: staticSchema<{ listingId: string; adminActionId: string }>()
+});
+
 export const inngest = new Inngest({
 	id: 'mysoko',
 	/**
