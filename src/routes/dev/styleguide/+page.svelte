@@ -78,6 +78,11 @@
 			<Price amount={149999} size="lg" />
 			<Price amount={2450000} size="xl" />
 			<Price amount="999.5" size="md" />
+			<!-- The two conventions, side by side. Catalogue prices drop trailing
+			     zeros; money-movement figures never do (a balance reading "3,359.2"
+			     reads as a truncation of a number someone is reconciling). -->
+			<Price amount={3359.2} size="md" />
+			<Price showCents amount={3359.2} size="md" />
 		</div>
 		<p class="text-sm text-subtle">Integers, numeric strings, and large values — all tabular.</p>
 	</section>

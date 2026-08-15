@@ -152,7 +152,9 @@
 				{:else}
 					<p class="truncate font-medium text-ink">{data.listing.title}</p>
 				{/if}
-				<div class="mt-1"><Price amount={centsToMajor(order.amountTotal)} size="lg" /></div>
+				<div class="mt-1">
+					<Price showCents amount={centsToMajor(order.amountTotal)} size="lg" />
+				</div>
 			</div>
 		</div>
 
@@ -160,7 +162,7 @@
 			<div class="flex items-baseline justify-between gap-4">
 				<dt class="text-muted">Total paid</dt>
 				<dd class="font-medium text-ink">
-					<Price amount={centsToMajor(order.amountTotal)} />
+					<Price showCents amount={centsToMajor(order.amountTotal)} />
 				</dd>
 			</div>
 			<div class="flex items-baseline justify-between gap-4">
