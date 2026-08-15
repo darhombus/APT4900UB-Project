@@ -12,6 +12,10 @@ import {
 import {
 	notifyBoostActivated,
 	notifyBoostExpiring,
+	notifyDisputeOpened,
+	notifyDisputeResolved,
+	notifyDisputeUnderReview,
+	notifyListingRemoved,
 	notifyOrderCompleted,
 	notifyOrderPaid,
 	notifyPayoutSent,
@@ -56,6 +60,13 @@ export const { GET, POST, PUT } = serve({
 		notifyReviewResponse,
 		notifyBoostActivated,
 		notifyBoostExpiring,
-		pruneNotifications
+		pruneNotifications,
+		// Disputes and moderation (ADM Section 6). Adding these CHANGES the
+		// registered function list, which is what makes this unit's Inngest resync
+		// unconditional — until the PUT lands, the events are accepted and dropped.
+		notifyDisputeOpened,
+		notifyDisputeUnderReview,
+		notifyDisputeResolved,
+		notifyListingRemoved
 	]
 });

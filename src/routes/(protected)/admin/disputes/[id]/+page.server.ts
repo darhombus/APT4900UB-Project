@@ -1,4 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
+import { emitDisputeResolved, emitDisputeUnderReview } from '$lib/server/notification-events';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -112,6 +113,10 @@ export const actions: Actions = {
 		if (err) {
 			return fail(400, { actionError: refusalMessage(err.code, 'review') });
 		}
+		// ADM-8 → the BUYER. After the RPC succeeded, so a refused transition
+		// notifies nobody; and a failed emission must not fail the action, since
+		// the dispute IS under review at this point.
+		await emitDisputeUnderReview(params.id);
 		return { reviewed: true };
 	},
 
@@ -151,6 +156,11 @@ export const actions: Actions = {
 		if (err) {
 			return fail(400, { actionError: refusalMessage(err.code, 'resolve') });
 		}
+		// ADM-8 → BOTH parties, with the buyer/seller wording split carried by the
+		// payload.role discriminator inside the handler. The handler re-reads the
+		// dispute's status for the outcome rather than trusting the event, so a
+		// replay cannot announce a decision that has since changed.
+		await emitDisputeResolved(params.id);
 		return { resolved: true };
 	}
 };

@@ -157,6 +157,37 @@ export const reviewResponse = eventType('review/response', {
 });
 
 /**
+ * A buyer opened a dispute on their order (ADM-8). Recipient: the seller.
+ *
+ * Identifiers only, like every other event here — the handler reads the dispute
+ * and its order rather than trusting a payload. The dispute id is also the
+ * notification's dedupe key (ADM-12): an order can carry more than one dispute
+ * over its life (one at a time, per ADM-1), so the order id would collapse a
+ * second dispute into the first one's notification.
+ *
+ * Inngest event names are their own namespace, `<domain>/<entity>.<event>` —
+ * `disputes/dispute.opened` here, `dispute.opened` in the notification catalog.
+ */
+export const disputeOpened = eventType('disputes/dispute.opened', {
+	schema: staticSchema<{ disputeId: string }>()
+});
+
+/** An admin started reviewing a dispute (ADM-8). Recipient: the buyer. */
+export const disputeUnderReview = eventType('disputes/dispute.under_review', {
+	schema: staticSchema<{ disputeId: string }>()
+});
+
+/**
+ * A dispute reached a terminal state (ADM-8). Recipients: buyer AND seller.
+ *
+ * The outcome is NOT carried here — the handler reads `disputes.status` back,
+ * so a replay cannot describe an outcome that has since been corrected.
+ */
+export const disputeResolved = eventType('disputes/dispute.resolved', {
+	schema: staticSchema<{ disputeId: string }>()
+});
+
+/**
  * An admin took a listing down (ADM-13).
  *
  * Identifiers only, like every other event here: the Section 6 handler reads

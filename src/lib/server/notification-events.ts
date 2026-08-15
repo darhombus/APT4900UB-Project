@@ -1,4 +1,7 @@
 import {
+	disputeOpened,
+	disputeResolved,
+	disputeUnderReview,
 	inngest,
 	listingRemoved,
 	orderCompleted,
@@ -71,6 +74,30 @@ export async function emitPayoutSent(payoutId: string): Promise<void> {
 }
 
 /**
+ * A buyer opened a dispute (ADM-8). Emitted from the buyer's order action after
+ * `open_dispute` returned an id — a refused dispute notifies nobody.
+ */
+export async function emitDisputeOpened(disputeId: string): Promise<void> {
+	await emit(`dispute.opened(${disputeId})`, () =>
+		inngest.send(disputeOpened.create({ disputeId }))
+	);
+}
+
+/** An admin moved a dispute to under_review (ADM-8). Recipient: the buyer. */
+export async function emitDisputeUnderReview(disputeId: string): Promise<void> {
+	await emit(`dispute.under_review(${disputeId})`, () =>
+		inngest.send(disputeUnderReview.create({ disputeId }))
+	);
+}
+
+/** An admin resolved a dispute (ADM-8). Recipients: buyer AND seller. */
+export async function emitDisputeResolved(disputeId: string): Promise<void> {
+	await emit(`dispute.resolved(${disputeId})`, () =>
+		inngest.send(disputeResolved.create({ disputeId }))
+	);
+}
+
+/**
  * An admin took a listing down (ADM-13).
  *
  * The database emits nothing — it has no outbound HTTP — so
@@ -79,8 +106,9 @@ export async function emitPayoutSent(payoutId: string): Promise<void> {
  * with the identifiers. Restore is deliberately silent: the listing reappears
  * at its prior status, which is self-evident to its seller.
  *
- * The handler lands in Section 6. Until it does this event has no subscriber,
- * which is harmless — Inngest accepts and drops it.
+ * Section 6 adds the handler (notify-listing-removed), so this now has a
+ * subscriber. The registered function list changed, which is what makes the
+ * Inngest resync obligation on this unit's push unconditional.
  */
 export async function emitListingRemoved(listingId: string, adminActionId: string): Promise<void> {
 	await emit(`listing.removed(${listingId})`, () =>
