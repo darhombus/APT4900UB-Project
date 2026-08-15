@@ -91,7 +91,7 @@
 			/>
 			<div class="min-w-0 flex-1">
 				<p class="truncate font-medium text-ink">{data.listing.title}</p>
-				<div class="mt-1"><Price {amount} /></div>
+				<div class="mt-1"><Price showCents {amount} /></div>
 			</div>
 		</div>
 

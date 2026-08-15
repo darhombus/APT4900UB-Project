@@ -92,7 +92,7 @@
 	<Card class="mt-6">
 		<p class="text-sm text-muted">Available for payout</p>
 		<div class="mt-1">
-			<Price amount={centsToMajor(data.availableKesCents)} size="xl" />
+			<Price showCents amount={centsToMajor(data.availableKesCents)} size="xl" />
 		</div>
 		<!-- N2 — this figure is smaller than "Earned from completed orders" on
 		     /sell/sales, and that difference must read as intentional. -->
@@ -104,15 +104,15 @@
 		{#if data.pendingKesCents > 0}
 			<div class="mt-4 border-t border-border pt-4">
 				<p class="text-sm text-muted">
-					<Price amount={centsToMajor(data.pendingKesCents)} size="sm" /> on hold — released
+					<Price showCents amount={centsToMajor(data.pendingKesCents)} size="sm" /> on hold — released
 					{data.holdDays} days after a buyer confirms they've received their order.
 				</p>
 				{#if data.releases.length > 0}
 					<ul class="mt-2 space-y-1">
 						{#each data.releases as release (release.releaseOn)}
 							<li class="text-sm text-ink">
-								<Price amount={centsToMajor(release.amountKesCents)} size="sm" /> available from
-								{dateFmt.format(new Date(release.releaseOn))}
+								<Price showCents amount={centsToMajor(release.amountKesCents)} size="sm" />
+								available from {dateFmt.format(new Date(release.releaseOn))}
 							</li>
 						{/each}
 					</ul>
@@ -133,13 +133,13 @@
 					<div class="flex justify-between gap-4">
 						<dt class="text-muted">Fee (1%)</dt>
 						<dd class="text-ink">
-							<Price amount={centsToMajor(data.instantFeeKesCents)} size="sm" />
+							<Price showCents amount={centsToMajor(data.instantFeeKesCents)} size="sm" />
 						</dd>
 					</div>
 					<div class="flex justify-between gap-4">
 						<dt class="font-medium text-ink">You receive</dt>
 						<dd class="font-medium text-ink">
-							<Price amount={centsToMajor(data.instantNetKesCents)} size="sm" />
+							<Price showCents amount={centsToMajor(data.instantNetKesCents)} size="sm" />
 						</dd>
 					</div>
 				</dl>
@@ -235,7 +235,7 @@
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0">
 								<p class="font-medium text-ink">
-									<Price amount={centsToMajor(payout.netKesCents)} size="sm" />
+									<Price showCents amount={centsToMajor(payout.netKesCents)} size="sm" />
 								</p>
 								<p class="text-xs text-subtle">
 									{payoutOriginLabel(payout.origin)} · {dateFmt.format(new Date(payout.createdAt))}
@@ -249,13 +249,13 @@
 							<div class="flex justify-between gap-4">
 								<dt class="text-muted">Amount</dt>
 								<dd class="text-ink">
-									<Price amount={centsToMajor(payout.amountKesCents)} size="sm" />
+									<Price showCents amount={centsToMajor(payout.amountKesCents)} size="sm" />
 								</dd>
 							</div>
 							<div class="flex justify-between gap-4">
 								<dt class="text-muted">Fee</dt>
 								<dd class="text-ink">
-									<Price amount={centsToMajor(payout.feeKesCents)} size="sm" />
+									<Price showCents amount={centsToMajor(payout.feeKesCents)} size="sm" />
 								</dd>
 							</div>
 						</dl>
@@ -285,13 +285,13 @@
 							<td class="px-4 py-3 text-ink">{dateFmt.format(new Date(payout.createdAt))}</td>
 							<td class="px-4 py-3 text-muted">{payoutOriginLabel(payout.origin)}</td>
 							<td class="px-4 py-3 text-right text-ink">
-								<Price amount={centsToMajor(payout.amountKesCents)} size="sm" />
+								<Price showCents amount={centsToMajor(payout.amountKesCents)} size="sm" />
 							</td>
 							<td class="px-4 py-3 text-right text-muted">
-								<Price amount={centsToMajor(payout.feeKesCents)} size="sm" />
+								<Price showCents amount={centsToMajor(payout.feeKesCents)} size="sm" />
 							</td>
 							<td class="px-4 py-3 text-right font-medium text-ink">
-								<Price amount={centsToMajor(payout.netKesCents)} size="sm" />
+								<Price showCents amount={centsToMajor(payout.netKesCents)} size="sm" />
 							</td>
 							<td class="px-4 py-3">
 								<Badge variant={payoutStatusVariant(payout.status)}>

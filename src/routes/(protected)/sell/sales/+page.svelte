@@ -92,7 +92,7 @@
 		<Card class="mt-6 p-4">
 			<div class="flex items-baseline justify-between gap-4">
 				<span class="text-sm text-muted">Earned from completed orders</span>
-				<Price amount={centsToMajor(data.completedNet)} size="lg" />
+				<Price showCents amount={centsToMajor(data.completedNet)} size="lg" />
 			</div>
 
 			<!-- ADM-15. The withheld money is NAMED rather than silently missing from
@@ -106,13 +106,17 @@
 					{#if data.heldNet > 0}
 						<div class="flex items-baseline justify-between gap-4">
 							<dt class="text-muted">On hold while a problem is settled</dt>
-							<dd class="text-ink"><Price amount={centsToMajor(data.heldNet)} size="sm" /></dd>
+							<dd class="text-ink">
+								<Price showCents amount={centsToMajor(data.heldNet)} size="sm" />
+							</dd>
 						</div>
 					{/if}
 					{#if data.refundedNet > 0}
 						<div class="flex items-baseline justify-between gap-4">
 							<dt class="text-muted">Refunded to buyers</dt>
-							<dd class="text-ink"><Price amount={centsToMajor(data.refundedNet)} size="sm" /></dd>
+							<dd class="text-ink">
+								<Price showCents amount={centsToMajor(data.refundedNet)} size="sm" />
+							</dd>
 						</div>
 					{/if}
 				</dl>
@@ -163,13 +167,15 @@
 						<dl class="mt-3 space-y-1 border-t border-border pt-3 text-sm">
 							<div class="flex justify-between gap-4">
 								<dt class="text-muted">Total</dt>
-								<dd class="text-ink"><Price amount={centsToMajor(sale.amountTotal)} /></dd>
+								<dd class="text-ink">
+									<Price showCents amount={centsToMajor(sale.amountTotal)} />
+								</dd>
 							</div>
 							<div class="flex justify-between gap-4">
 								<dt class="text-muted">Platform fee</dt>
 								<dd class="text-subtle">
 									{#if sale.commissionAmount === null}—{:else}
-										<Price amount={centsToMajor(sale.commissionAmount)} />
+										<Price showCents amount={centsToMajor(sale.commissionAmount)} />
 									{/if}
 								</dd>
 							</div>
@@ -177,7 +183,7 @@
 								<dt class="font-medium text-ink">You receive</dt>
 								<dd class="font-medium text-ink">
 									{#if sale.sellerNet === null}—{:else}
-										<Price amount={centsToMajor(sale.sellerNet)} />
+										<Price showCents amount={centsToMajor(sale.sellerNet)} />
 									{/if}
 								</dd>
 							</div>
@@ -219,16 +225,16 @@
 							<td class="py-3 pr-4 text-ink">{sale.buyerName}</td>
 							<td class="py-3 pr-4 text-subtle">{dateFmt.format(new Date(sale.createdAt))}</td>
 							<td class="py-3 pr-4 text-right text-ink">
-								<Price amount={centsToMajor(sale.amountTotal)} />
+								<Price showCents amount={centsToMajor(sale.amountTotal)} />
 							</td>
 							<td class="py-3 pr-4 text-right text-subtle">
 								{#if sale.commissionAmount === null}—{:else}
-									<Price amount={centsToMajor(sale.commissionAmount)} />
+									<Price showCents amount={centsToMajor(sale.commissionAmount)} />
 								{/if}
 							</td>
 							<td class="py-3 pr-4 text-right font-medium text-ink">
 								{#if sale.sellerNet === null}—{:else}
-									<Price amount={centsToMajor(sale.sellerNet)} />
+									<Price showCents amount={centsToMajor(sale.sellerNet)} />
 								{/if}
 							</td>
 							<td class="py-3">
