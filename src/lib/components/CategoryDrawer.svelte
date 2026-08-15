@@ -12,6 +12,8 @@
 		loggedIn: boolean;
 		/** Sellers get "My listings"; buyers are linked straight to onboarding. */
 		isSeller?: boolean;
+		/** ADM-14 — show admin navigation instead of seller navigation. */
+		isAdmin?: boolean;
 		profile: { full_name: string; avatar_url: string | null } | null;
 		/** Unread-conversation count for the Messages badge (capped display at 9+). */
 		unreadCount?: number;
@@ -25,6 +27,7 @@
 		categoryTree,
 		loggedIn,
 		isSeller = false,
+		isAdmin = false,
 		profile,
 		unreadCount = 0,
 		notificationCount = 0
@@ -191,11 +194,18 @@
 					     redirects. Every hop is a separate serverless invocation, so on a
 					     cold tier the round-trip is the latency, not the work. Logged-out
 					     keeps /sell, which routes through the login guard as before. -->
-					<a
-						href={!loggedIn ? '/sell' : isSeller ? '/sell/listings' : '/sell/onboarding'}
-						class={navItem}
-						onclick={onclose}>Sell on MySoko</a
-					>
+					{#if isAdmin}
+						<!-- ADM-14: "Sell on MySoko" is a dead end for an admin — BST-19
+						     refuses their INSERT and BST-20 already removed the create
+						     affordance. Point them at the surface they actually work on. -->
+						<a href="/admin" class={navItem} onclick={onclose}>Admin dashboard</a>
+					{:else}
+						<a
+							href={!loggedIn ? '/sell' : isSeller ? '/sell/listings' : '/sell/onboarding'}
+							class={navItem}
+							onclick={onclose}>Sell on MySoko</a
+						>
+					{/if}
 				</div>
 
 				<!-- Account -->
@@ -255,7 +265,9 @@
 						     "Sell on MySoko" link above, which lands on onboarding via the
 						     /sell guard — offering "My listings" as well gave them two
 						     entries pointing at the same flow. -->
-						{#if isSeller}
+						{#if isAdmin}
+							<a href="/admin" class={navItem} onclick={onclose}>Admin dashboard</a>
+						{:else if isSeller}
 							<a href="/sell/listings" class={navItem} onclick={onclose}>My listings</a>
 						{/if}
 						<form method="POST" action="/logout" use:enhance onsubmit={onclose}>

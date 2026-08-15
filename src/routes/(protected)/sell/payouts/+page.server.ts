@@ -9,6 +9,7 @@ import {
 	isInFlightViolation
 } from '$lib/server/payout-request';
 import { inngest, payoutRequested } from '$lib/server/inngest';
+import { blocksEarnings } from '$lib/disputes';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -51,7 +52,12 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 			// order is not earned yet and is deliberately absent from this query.
 			supabase
 				.from('orders')
-				.select('seller_net, completed_at')
+				// ADM-15: `id` is now selected so each row can be classified against
+				// the disputes read below. Without it this list was dispute-BLIND while
+				// the headline directly above it was dispute-aware — the same page
+				// contradicting itself, which is the sharper of the two defects C3
+				// found.
+				.select('id, seller_net, completed_at')
 				.eq('seller_id', user!.id)
 				.eq('status', 'completed')
 				.gt('completed_at', holdCutoff.toISOString())
@@ -65,9 +71,34 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 	// "KES X available from <date>" per tranche rather than one opaque total.
 	// seller_pending_balance stays authoritative for the headline figure; these
 	// rows only schedule it.
+	//
+	// ADM-15 — the tranche list must encode the SAME rule as the headline. One
+	// extra query rather than a per-order round trip: the ids are already in
+	// hand, and disputes_select admits the seller via dispute_party.
+	const heldOrders = heldOrdersResult.data ?? [];
+	const blockedOrderIds = new Set<string>();
+	if (heldOrders.length > 0) {
+		const { data: disputeRows } = await supabase
+			.from('disputes')
+			.select('order_id, status')
+			.in(
+				'order_id',
+				heldOrders.map((o) => o.id)
+			);
+		for (const d of disputeRows ?? []) {
+			// blocksEarnings is the shared definition — the same one the sales page
+			// uses and the mirror of public.order_earnings_blocked.
+			if (blocksEarnings(d.status)) blockedOrderIds.add(d.order_id);
+		}
+	}
+
 	const releaseByDate = new Map<string, number>();
-	for (const order of heldOrdersResult.data ?? []) {
+	for (const order of heldOrders) {
 		if (!order.completed_at) continue;
+		// A blocked order has no release date to promise: seller_pending_balance
+		// already excludes it from the headline, so listing a tranche for it would
+		// make this page disagree with the number printed above it.
+		if (blockedOrderIds.has(order.id)) continue;
 		const releaseAt = new Date(
 			new Date(order.completed_at).getTime() + PAYOUT_HOLD_DAYS * 86_400_000
 		);

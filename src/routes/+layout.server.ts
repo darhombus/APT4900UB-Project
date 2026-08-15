@@ -26,6 +26,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 	let profile: { full_name: string; avatar_url: string | null } | null = null;
 	let isSeller = false;
 	let canCreateListing = false;
+	let isAdmin = false;
 	let unreadCount = 0;
 	let notificationCount = 0;
 	if (session && user) {
@@ -52,6 +53,12 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 			// it gates ENTRY to /sell (listings, sales, payouts), which admins keep
 			// (ADM-2 scope note). This gates the CREATE button, which they do not.
 			canCreateListing = data.role === 'seller';
+			// ADM-14, the same precedent again: a THIRD display signal rather than a
+			// redefinition of either existing one. `isSeller` still governs /sell
+			// ENTRY, which admins keep (ADM-2); this governs which navigation an
+			// admin is SHOWN. Nothing here gates anything — /admin is guarded by
+			// requireRole(..., { hide: true }) and is unaffected by this flag.
+			isAdmin = data.role === 'admin';
 			// Prime the request-scoped role cache so the /sell guard reuses this fetch
 			// instead of issuing its own profile query.
 			locals.roleCache = Promise.resolve(data.role);
@@ -69,6 +76,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
 		profile,
 		isSeller,
 		canCreateListing,
+		isAdmin,
 		unreadCount,
 		notificationCount,
 		categoryTree: await categoriesPromise,

@@ -37,6 +37,52 @@ export function isDisputeLive(status: string): boolean {
 	return status === 'open' || status === 'under_review';
 }
 
+/**
+ * ADM-15 — the dispute states that stop an order counting toward seller
+ * earnings. THE TYPESCRIPT MIRROR OF `public.order_earnings_blocked(uuid)`.
+ *
+ *   open, under_review   held while the claim is live (ADM-11)
+ *   resolved_refunded    held PERMANENTLY — the buyer has their money back and
+ *                        nothing else deducts it (ADM-15)
+ *   resolved_rejected    absent on purpose: no money moved, so the hold lifts
+ *
+ * TWO DEFINITIONS EXIST, AND THAT IS DELIBERATE. The money path is SQL (the
+ * balance functions call the helper); the display readers are TypeScript and
+ * need per-order flags to SHOW the held amount rather than silently drop it, so
+ * they classify rows they have already fetched instead of making one round trip
+ * per order. What stops the two drifting is not this comment: a db test
+ * (adm15-earnings-agreement) drives the SQL helper through all four dispute
+ * states and asserts it agrees with this list on every one, so a one-sided edit
+ * fails loudly.
+ */
+export const EARNINGS_BLOCKING_DISPUTE_STATUSES = [
+	'open',
+	'under_review',
+	'resolved_refunded'
+] as const;
+
+/** True when this dispute status stops its order counting toward earnings. */
+export function blocksEarnings(status: string): boolean {
+	return (EARNINGS_BLOCKING_DISPUTE_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * Why an order's earnings are withheld, for the two display readers.
+ *
+ * `held` is temporary and will resolve one way or the other; `refunded` is
+ * final. They are separated because the seller is owed different words: money
+ * coming back versus money gone.
+ */
+export type EarningsBlock = 'held' | 'refunded' | null;
+
+export function earningsBlockFor(statuses: readonly string[]): EarningsBlock {
+	// Refunded wins: it is permanent, so it is the honest thing to say even if a
+	// later dispute on the same order is somehow live.
+	if (statuses.includes('resolved_refunded')) return 'refunded';
+	if (statuses.some((s) => s === 'open' || s === 'under_review')) return 'held';
+	return null;
+}
+
 /** Matches the DB CHECK on `disputes.reason` so a bad length fails inline. */
 export const DISPUTE_REASON_MIN = 10;
 export const DISPUTE_REASON_MAX = 2000;
