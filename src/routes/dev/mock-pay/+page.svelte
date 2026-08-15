@@ -26,7 +26,7 @@
 		<div class="mt-4 border-t border-border pt-4">
 			<div class="flex items-baseline justify-between">
 				<span class="text-sm text-muted">Amount</span>
-				<Price {amount} size="lg" />
+				<Price showCents {amount} size="lg" />
 			</div>
 			<div class="mt-2 flex items-baseline justify-between">
 				<span class="text-sm text-muted">Reference</span>

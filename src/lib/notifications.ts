@@ -105,8 +105,12 @@ export interface NotificationRow {
  */
 export function formatKesFromCents(cents: number | null | undefined): string {
 	const n = typeof cents === 'number' && Number.isFinite(cents) ? cents / 100 : 0;
+	// 2dp UNCONDITIONALLY — no flag. Every caller of this is money-movement by
+	// definition: it renders amounts inside notification copy and email bodies,
+	// which are receipts. There is no catalogue-price caller to protect, so the
+	// opt-in that `Price` needs would be a switch with only one setting.
 	return `KSh ${new Intl.NumberFormat('en-KE', {
-		minimumFractionDigits: 0,
+		minimumFractionDigits: 2,
 		maximumFractionDigits: 2
 	}).format(n)}`;
 }

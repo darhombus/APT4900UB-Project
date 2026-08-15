@@ -166,7 +166,7 @@
 								<p class="text-sm font-medium text-warning-strong">Refund in Paystack first</p>
 								<p class="mt-1 text-sm text-warning-strong">
 									Open the Paystack dashboard, refund
-									<Price amount={centsToMajor(data.order?.amount_total ?? 0)} size="sm" />
+									<Price showCents amount={centsToMajor(data.order?.amount_total ?? 0)} size="sm" />
 									against reference
 									<span class="tnum font-medium">{data.order?.paystack_reference}</span>, then
 									record the refund reference below. Recording it here does not move any money.
@@ -204,11 +204,11 @@
 				<dl class="mt-3 space-y-2 text-sm">
 					<div class="flex justify-between gap-2">
 						<dt class="text-muted">Total</dt>
-						<dd><Price amount={centsToMajor(data.order.amount_total)} size="sm" /></dd>
+						<dd><Price showCents amount={centsToMajor(data.order.amount_total)} size="sm" /></dd>
 					</div>
 					<div class="flex justify-between gap-2">
 						<dt class="text-muted">Seller earns</dt>
-						<dd><Price amount={centsToMajor(data.order.seller_net ?? 0)} size="sm" /></dd>
+						<dd><Price showCents amount={centsToMajor(data.order.seller_net ?? 0)} size="sm" /></dd>
 					</div>
 					<div class="flex justify-between gap-2">
 						<dt class="text-muted">Status</dt>
@@ -262,16 +262,16 @@
 				{#if !isResolved}
 					<div class="flex justify-between gap-2">
 						<dt class="text-muted">Withheld by this dispute</dt>
-						<dd><Price amount={centsToMajor(sellerNet)} size="sm" /></dd>
+						<dd><Price showCents amount={centsToMajor(sellerNet)} size="sm" /></dd>
 					</div>
 				{/if}
 				<div class="flex justify-between gap-2">
 					<dt class="text-muted">Available to withdraw</dt>
-					<dd><Price amount={centsToMajor(data.payout.availableCents)} size="sm" /></dd>
+					<dd><Price showCents amount={centsToMajor(data.payout.availableCents)} size="sm" /></dd>
 				</div>
 				<div class="flex justify-between gap-2">
 					<dt class="text-muted">Already paid out</dt>
-					<dd><Price amount={centsToMajor(data.payout.paidOutCents)} size="sm" /></dd>
+					<dd><Price showCents amount={centsToMajor(data.payout.paidOutCents)} size="sm" /></dd>
 				</div>
 			</dl>
 

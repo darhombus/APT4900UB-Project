@@ -74,7 +74,7 @@
 						</div>
 						<div class="shrink-0 text-right">
 							{#if dispute.amountCents !== null}
-								<Price amount={centsToMajor(dispute.amountCents)} size="sm" />
+								<Price showCents amount={centsToMajor(dispute.amountCents)} size="sm" />
 							{/if}
 							<p class="mt-1 text-xs text-subtle">{dateFmt.format(new Date(dispute.createdAt))}</p>
 						</div>

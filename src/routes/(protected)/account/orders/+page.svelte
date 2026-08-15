@@ -45,7 +45,7 @@
 							</p>
 						</div>
 						<div class="flex flex-none flex-col items-end gap-1">
-							<Price amount={centsToMajor(order.amountTotal)} />
+							<Price showCents amount={centsToMajor(order.amountTotal)} />
 							<Badge variant={orderStatusVariant(order.status)}>
 								{orderStatusLabel(order.status)}
 							</Badge>
