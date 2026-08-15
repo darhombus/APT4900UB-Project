@@ -40,6 +40,8 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
 		isSeller: data?.isSeller ?? false,
 		// BST-20 — the create affordance's own signal, forwarded like the rest.
 		canCreateListing: data?.canCreateListing ?? false,
+		// ADM-14 — which navigation to show, forwarded like the rest.
+		isAdmin: data?.isAdmin ?? false,
 		unreadCount: data?.unreadCount ?? 0,
 		notificationCount: data?.notificationCount ?? 0,
 		categoryTree: data?.categoryTree ?? []
