@@ -95,40 +95,28 @@
 				<Price showCents amount={centsToMajor(data.completedNet)} size="lg" />
 			</div>
 
-			<!-- ADM-15. The withheld money is NAMED rather than silently missing from
-			     the total above. A figure that shrinks with no explanation is the dead
-			     end ADM-13 exists to prevent, and it would land here: a seller would
-			     see a smaller number and no reason for it.
-			     `held` is temporary and will resolve; `refunded` is final. They are
-			     separate lines because the seller is owed different words. -->
-			{#if data.heldNet > 0 || data.refundedNet > 0}
+			<!-- ADM-15, as amended. Money withheld by a LIVE dispute is NAMED rather
+			     than silently missing from the total above — a figure that shrinks with
+			     no explanation is the dead end ADM-13 exists to prevent, and it would
+			     land here.
+			     A REFUND IS NOT A SUMMARY LINE. It is a fact about one order, so it is
+			     marked on that order's own row in the list below. Kept here it became
+			     permanent furniture: once a seller had a single refund, the line
+			     rendered on every load forever, long after the matter was settled.
+			     `held` stays because it is genuinely a standing property of the
+			     summary — that money is withheld RIGHT NOW and resolves later, which
+			     is exactly what a summary is for. -->
+			{#if data.heldNet > 0}
 				<dl class="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
-					{#if data.heldNet > 0}
-						<div class="flex items-baseline justify-between gap-4">
-							<dt class="text-muted">On hold while a problem is settled</dt>
-							<dd class="text-ink">
-								<Price showCents amount={centsToMajor(data.heldNet)} size="sm" />
-							</dd>
-						</div>
-					{/if}
-					{#if data.refundedNet > 0}
-						<div class="flex items-baseline justify-between gap-4">
-							<dt class="text-muted">Refunded to buyers</dt>
-							<dd class="text-ink">
-								<Price showCents amount={centsToMajor(data.refundedNet)} size="sm" />
-							</dd>
-						</div>
-					{/if}
+					<div class="flex items-baseline justify-between gap-4">
+						<dt class="text-muted">On hold while a problem is settled</dt>
+						<dd class="text-ink">
+							<Price showCents amount={centsToMajor(data.heldNet)} size="sm" />
+						</dd>
+					</div>
 				</dl>
 				<p class="mt-2 text-xs text-subtle">
-					{#if data.heldNet > 0 && data.refundedNet > 0}
-						Money on hold is added back if the problem is settled in your favour. Refunded money has
-						gone back to the buyer and is not paid out.
-					{:else if data.heldNet > 0}
-						This is added back to your earnings if the problem is settled in your favour.
-					{:else}
-						This has gone back to the buyer and is not paid out.
-					{/if}
+					This is added back to your earnings if the problem is settled in your favour.
 				</p>
 			{/if}
 		</Card>
@@ -160,9 +148,14 @@
 									{sale.buyerName} · {dateFmt.format(new Date(sale.createdAt))}
 								</p>
 							</div>
-							<Badge variant={orderStatusVariant(sale.status)}>
-								{orderStatusLabel(sale.status)}
-							</Badge>
+							<div class="flex flex-none flex-col items-end gap-1">
+								<Badge variant={orderStatusVariant(sale.status)}>
+									{orderStatusLabel(sale.status)}
+								</Badge>
+								{#if sale.earningsBlock === 'refunded'}
+									<Badge variant="error">Refunded</Badge>
+								{/if}
+							</div>
 						</div>
 						<dl class="mt-3 space-y-1 border-t border-border pt-3 text-sm">
 							<div class="flex justify-between gap-4">
@@ -238,9 +231,16 @@
 								{/if}
 							</td>
 							<td class="py-3">
-								<Badge variant={orderStatusVariant(sale.status)}>
-									{orderStatusLabel(sale.status)}
-								</Badge>
+								<!-- ADM-15, as amended: the refund is marked on the ORDER it
+								     happened to, replacing the standing summary line above. -->
+								<div class="flex flex-wrap items-center gap-1">
+									<Badge variant={orderStatusVariant(sale.status)}>
+										{orderStatusLabel(sale.status)}
+									</Badge>
+									{#if sale.earningsBlock === 'refunded'}
+										<Badge variant="error">Refunded</Badge>
+									{/if}
+								</div>
 							</td>
 						</tr>
 						{#if sale.dispute}

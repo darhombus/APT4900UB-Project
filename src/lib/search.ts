@@ -20,6 +20,34 @@ export const SEARCH_PAGE_SIZE = 24;
  *  Extra tokens beyond this are dropped here and never sent. */
 export const MAX_SEARCH_TOKENS = 6;
 
+/**
+ * The shortest query we will actually run. TWO, and the exact value is the whole
+ * point — it is not a round number picked for comfort.
+ *
+ * Measured against `search_listings` on the real catalog, a search matches on
+ * one of two mechanisms, and NEITHER is predicted by length:
+ *
+ *   full-text   `:*` is LEXEME-INITIAL, so 'iph' finds "iPhone" and 'ph' cannot.
+ *   trigram     pg_trgm pads a string with two leading spaces, so a short
+ *               mid-word fragment's trigram set can miss the title's entirely.
+ *
+ * What that produces is not a clean cutoff. At two characters 'gb' returns
+ * "iPhone 12 256GB" (word_similarity 0.333) while 'ph' returns nothing (0.000);
+ * at three, 'one' works (0.500) and 'pho' does not (0.250). POSITION AND TRIGRAM
+ * DENSITY DECIDE, NOT LENGTH — so a 3-character guard would refuse queries that
+ * work today and fix nothing.
+ *
+ * ONE character is the only case worth blocking, and not because it finds too
+ * little. `word_similarity('p', …)` is structurally 0 against any title with no
+ * p-initial word, so the trigram branch cannot fire; but the full-text branch
+ * still matches unrelated listings whose own words start with 'p', leaving a
+ * POPULATED results page that silently lacks what the user was looking for.
+ * That is the takedown hazard's shape — a non-empty result set is not evidence
+ * that any particular listing is present — and it is the one outcome here that
+ * actively misleads rather than merely disappoints.
+ */
+export const MIN_QUERY_LENGTH = 2;
+
 export type SearchSort = 'relevance' | 'newest' | 'price_asc' | 'price_desc';
 export const SEARCH_SORTS: readonly SearchSort[] = [
 	'relevance',
@@ -59,6 +87,14 @@ export interface SearchQuery {
 	page: number;
 	/** True when a query is present and relevance ranking applies. */
 	ranked: boolean;
+	/**
+	 * A query too short to run (see MIN_QUERY_LENGTH). The caller skips the RPC
+	 * and the page shows guidance instead of results.
+	 *
+	 * FALSE for a BLANK query — that is a browse, not a short search, and it
+	 * legitimately lists everything.
+	 */
+	tooShort: boolean;
 }
 
 function toPositiveInt(value: string | null): number | null {
@@ -147,6 +183,11 @@ export function composeSearch(params: SearchParams, tree: CategoryTree[]): Searc
 		from,
 		to: from + SEARCH_PAGE_SIZE - 1,
 		page: params.page,
-		ranked: tokens.length > 0 && params.sort === 'relevance'
+		ranked: tokens.length > 0 && params.sort === 'relevance',
+		// `params.q` is already trimmed by parseSearchParams, so this is the typed
+		// query's real length. Measured on the whole query rather than per token:
+		// the guard exists to stop a single character reaching the tsquery, and
+		// "p" is the only shape that produces one.
+		tooShort: params.q.length > 0 && params.q.length < MIN_QUERY_LENGTH
 	};
 }

@@ -17,14 +17,20 @@ function categoryName(tree: CategoryTree[], slug: string): string | null {
 export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
 	const tree = await loadCategoryTree(supabase);
 	const params = parseSearchParams(url.searchParams);
-	const { listings, total } = await runSearch(
-		supabase,
-		composeSearch(params, tree),
-		subcategoryNameMap(tree)
-	);
+	const query = composeSearch(params, tree);
+
+	// A one-character query never reaches the database. The guard lives here as
+	// well as in the page because /search is reachable directly — a bookmark, a
+	// pasted link, the back button — and because the search box is a native GET
+	// form that submits with JavaScript off. A guard only in the component would
+	// be bypassed by every one of those, and would still pay for the round trip.
+	const { listings, total } = query.tooShort
+		? { listings: [], total: 0 }
+		: await runSearch(supabase, query, subcategoryNameMap(tree));
 
 	return {
 		params,
+		tooShort: query.tooShort,
 		listings,
 		total,
 		totalPages: Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE)),
