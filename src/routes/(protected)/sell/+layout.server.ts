@@ -30,10 +30,18 @@ export const load: LayoutServerLoad = async ({ locals, url, route }) => {
 	// /sell/onboarding specifically for exactly that reason — /sell/listings
 	// alone would still look correct with the branches in the wrong order.
 	//
-	// The disjunction below is deliberately left reading `seller || admin`. It
-	// is seller-only in effect because this branch has already returned, and
-	// rewriting it belongs to ADM-28's signal work, not here — doing both in
-	// one phase makes each change harder to attribute.
+	// LOAD-BEARING FOR TYPES, NOT ONLY FOR BEHAVIOUR. `redirect()` returns
+	// `never`, so this branch narrows `role` for everything downstream of it —
+	// this file below, sell/+page.server.ts (which inherits the narrowed type
+	// through `await parent()`), and sell/listings/+page.svelte. All three now
+	// type-check as seller-or-buyer ONLY because of this line. Each previously
+	// carried its own `role === 'admin'` comparison; all three were removed once
+	// this branch made them provably dead.
+	//
+	// The dependency is enforced by flow analysis, not by any runtime check.
+	// Delete this branch and those files silently regain admin reachability with
+	// no comparison left anywhere to catch it — the e2e assertions in
+	// admin-landing.spec.ts would become the only guard.
 	//
 	// KNOWN LIMITATION, stated plainly rather than papered over: a seller who is
 	// promoted to admin while still holding listings, in-flight sales or pending
@@ -44,7 +52,7 @@ export const load: LayoutServerLoad = async ({ locals, url, route }) => {
 	// or prevents a violation. If it happens, the remedy is service role.
 	if (role === 'admin') redirect(303, '/admin');
 
-	if (role === 'seller' || role === 'admin') {
+	if (role === 'seller') {
 		// Already a seller — no need to see the onboarding form. Straight to
 		// /sell/listings, not /sell: /sell only redirects here anyway, and the
 		// extra hop is a second serverless invocation for nothing.
