@@ -226,40 +226,49 @@
 								{profile?.full_name ?? 'Your account'}
 							</span>
 						</div>
-						<a
-							href="/messages"
-							class={navItem}
-							onclick={onclose}
-							aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
-						>
-							<span>Messages</span>
-							{#if unreadCount > 0}
-								<span
-									aria-hidden="true"
-									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
-								>
-									{unreadLabel}
-								</span>
-							{/if}
-						</a>
-						<a
-							href="/notifications"
-							class={navItem}
-							onclick={onclose}
-							aria-label={notificationCount > 0
-								? `Notifications, ${notificationLabel} unread`
-								: 'Notifications'}
-						>
-							<span>Notifications</span>
-							{#if notificationCount > 0}
-								<span
-									aria-hidden="true"
-									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
-								>
-									{notificationLabel}
-								</span>
-							{/if}
-						</a>
+						<!-- ADM-26: Messages and Notifications are participant capabilities and
+						     are not offered to an admin. Unlike the header pair, each of these
+						     is SELF-CONTAINED — the aria-hidden badge is nested inside the
+						     anchor that carries the aria-label — so hiding the entry removes
+						     the badge and its accessible name together. No paired treatment is
+						     needed here. Both routes stay reachable by URL (ADM-29). -->
+						{#if !isAdmin}
+							<a
+								href="/messages"
+								class={navItem}
+								onclick={onclose}
+								aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
+							>
+								<span>Messages</span>
+								{#if unreadCount > 0}
+									<span
+										aria-hidden="true"
+										class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+									>
+										{unreadLabel}
+									</span>
+								{/if}
+							</a>
+							<a
+								href="/notifications"
+								class={navItem}
+								onclick={onclose}
+								aria-label={notificationCount > 0
+									? `Notifications, ${notificationLabel} unread`
+									: 'Notifications'}
+							>
+								<span>Notifications</span>
+								{#if notificationCount > 0}
+									<span
+										aria-hidden="true"
+										class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+									>
+										{notificationLabel}
+									</span>
+								{/if}
+							</a>
+						{/if}
+						<!-- ADM-27: /account is retained in full for every role. -->
 						<a href="/account" class={navItem} onclick={onclose}>Account</a>
 						<!-- Sellers only. A buyer's single route into selling is the
 						     "Sell on MySoko" link above, which lands on onboarding via the
