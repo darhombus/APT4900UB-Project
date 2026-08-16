@@ -2,6 +2,7 @@
 	import { navigating } from '$app/state';
 	import { FilterSortBar, ListingCard } from '$lib/components';
 	import { buildFilterUrl } from '$lib/filter-nav';
+	import { MIN_QUERY_LENGTH } from '$lib/search';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -9,8 +10,14 @@
 	const p = $derived(data.params);
 	const base = '/search';
 
+	// No count for a query we never ran. "0 results for “p”" is a claim that the
+	// catalogue was searched and came back empty, which would contradict the
+	// guidance below it — and would be the one thing this guard exists to stop
+	// the page saying. Blank, so the panel below does that job alone.
 	const countText = $derived(
-		`${data.total} ${data.total === 1 ? 'result' : 'results'}${p.q ? ` for “${p.q}”` : ''}`
+		data.tooShort
+			? ''
+			: `${data.total} ${data.total === 1 ? 'result' : 'results'}${p.q ? ` for “${p.q}”` : ''}`
 	);
 
 	// A navigation to the results page itself (sort/filter/page change) shows the
@@ -100,6 +107,21 @@
 			{/each}
 		</div>
 		<span class="sr-only" role="status">Loading results…</span>
+	{:else if data.tooShort}
+		<!-- A one-character query, which never reached the database. Deliberately
+		     the SAME primitive as the no-results panel below rather than a new
+		     treatment: it occupies the same slot for the same reader, and a second
+		     visual language for "the grid is empty" would be novelty, not clarity.
+		     Only the words differ, because only the situation differs — nothing
+		     failed here, the search simply has not started. Hence an instruction
+		     ("Keep typing") rather than a report ("No results"), and a plain
+		     statement of the rule rather than an apology for it. -->
+		<div class="rounded-card border border-dashed border-border bg-surface p-12 text-center">
+			<p class="font-medium text-ink">Keep typing</p>
+			<p class="mt-1 text-sm text-muted">
+				Searches need at least {MIN_QUERY_LENGTH} characters.
+			</p>
+		</div>
 	{:else if data.listings.length === 0}
 		<div class="rounded-card border border-dashed border-border bg-surface p-12 text-center">
 			<p class="font-medium text-ink">No results{p.q ? ` for “${p.q}”` : ''}</p>
