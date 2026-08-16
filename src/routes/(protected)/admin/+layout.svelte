@@ -29,9 +29,6 @@
 	<header class="border-b border-border pb-4">
 		<div class="flex flex-wrap items-baseline justify-between gap-2">
 			<h1 class="font-display text-xl font-semibold tracking-tight text-ink">Admin</h1>
-			<!-- Says which powers are in play, not who is signed in — the header
-			     already carries the account. -->
-			<p class="text-xs text-subtle">Moderation and dispute tools</p>
 		</div>
 
 		<nav aria-label="Admin sections" class="-mb-px mt-4 flex flex-wrap gap-x-1 gap-y-1">

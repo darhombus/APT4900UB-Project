@@ -194,12 +194,18 @@
 					     redirects. Every hop is a separate serverless invocation, so on a
 					     cold tier the round-trip is the latency, not the work. Logged-out
 					     keeps /sell, which routes through the login guard as before. -->
-					{#if isAdmin}
-						<!-- ADM-14: "Sell on MySoko" is a dead end for an admin — BST-19
-						     refuses their INSERT and BST-20 already removed the create
-						     affordance. Point them at the surface they actually work on. -->
-						<a href="/admin" class={navItem} onclick={onclose}>Admin dashboard</a>
-					{:else}
+					<!-- ADM-34: Explore offers an admin NOTHING here. The Admin dashboard
+					     link lives once, in the Account section below; ADM-14 put a second
+					     copy in this slot when it displaced "Sell on MySoko", and two
+					     identical links to the same destination in one drawer is noise.
+
+					     GATED ON `!isAdmin`, NOT LEFT AS AN {:else}. Deleting the admin arm
+					     alone would drop an admin into the else and offer them a seller CTA
+					     pointing at /sell — which ADM-25 now redirects to /admin, so the
+					     link would bounce. A fallback arm inheriting a case it was never
+					     written for is the widening pattern; this states the condition
+					     instead. -->
+					{#if !isAdmin}
 						<a
 							href={!loggedIn ? '/sell' : isSeller ? '/sell/listings' : '/sell/onboarding'}
 							class={navItem}
