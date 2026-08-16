@@ -199,20 +199,22 @@ export const load: PageServerLoad = async ({ locals: { supabase, user } }) => {
 	const completedNet = completedSales
 		.filter((s) => s.earningsBlock === null)
 		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
-	// Temporary — a live dispute. Resolves one way or the other.
+	// Temporary — a live dispute. Resolves one way or the other, so it is a
+	// standing property of the summary and is totalled here.
+	//
+	// There is deliberately NO `refundedNet` companion. A refund is permanent and
+	// belongs to one order, so it is marked on that order's row (`earningsBlock`
+	// is already on every sale) rather than summed into a summary line that would
+	// then render forever. `completedNet` still excludes refunded orders — what
+	// changed is where the explanation lives, not the arithmetic.
 	const heldNet = completedSales
 		.filter((s) => s.earningsBlock === 'held')
-		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
-	// Permanent — the buyer was refunded (ADM-15).
-	const refundedNet = completedSales
-		.filter((s) => s.earningsBlock === 'refunded')
 		.reduce((sum, s) => sum + (s.sellerNet ?? 0), 0);
 
 	return {
 		sales,
 		completedNet,
 		heldNet,
-		refundedNet,
 		reviews,
 		sellerAggregate: {
 			reviewCount: me?.review_count ?? 0,

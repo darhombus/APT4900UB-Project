@@ -47,7 +47,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		from,
 		to: from + SEARCH_PAGE_SIZE - 1,
 		page: sp.page,
-		ranked: false
+		ranked: false,
+		// A category page carries no text query at all (`q: []` above), so the
+		// short-query guard can never apply to it.
+		tooShort: false
 	};
 	const { listings, total } = await runSearch(supabase, query, subcategoryNameMap(tree));
 

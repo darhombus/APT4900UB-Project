@@ -400,8 +400,7 @@
 					</summary>
 					<div class="border-t border-border px-4 py-3">
 						<p class="text-sm text-muted">
-							Tell us what went wrong and our team will look into it. The seller is told that you
-							have reported a problem, and their payment for this order is held until it is settled.
+							Tell us what went wrong and our team will look into it.
 						</p>
 						<form method="POST" action="?/openDispute" use:enhance={onOpenDispute} class="mt-3">
 							<Label for="reason">What went wrong?</Label>
