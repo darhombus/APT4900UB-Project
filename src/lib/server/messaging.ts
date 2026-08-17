@@ -42,6 +42,34 @@ type ConversationRow = Pick<
 const CONVERSATION_COLUMNS =
 	'id, listing_id, buyer_id, seller_id, last_message_at, buyer_last_read_at, seller_last_read_at';
 
+/**
+ * ADM-36 — "the caller is one of this conversation's two parties", as a filter
+ * the QUERY carries rather than something RLS is trusted to supply.
+ *
+ * WHY THIS EXISTS AT ALL. Every read below used to select without an owner
+ * filter and let `conversations_select` do the scoping. That policy reads
+ * `(buyer_id = auth.uid() OR seller_id = auth.uid() OR is_admin())`, so for a
+ * buyer or a seller the predicate IS the filter and the code looked correct.
+ * For an admin the third arm opened every conversation on the platform: the
+ * inbox listed threads between strangers, and any thread could be opened by URL.
+ * The read arms exist so /admin can see the platform (BST-22); a PARTICIPANT
+ * surface reading through them is a containment failure, not a feature.
+ *
+ * The bug predates ADM-17 — ADM-29 only made it reachable, by keeping /messages
+ * open to an admin while removing its nav entry.
+ *
+ * ADM-37: no policy is narrowed to fix this, and none may be.
+ * `conversations_select` and `messages_select` keep their admin arms, because
+ * /admin/disputes/[id] reads the thread pointer through exactly those arms.
+ * The scoping belongs in the query, where the surface's own intent lives.
+ *
+ * `userId` is the id from the verified session (hooks.server.ts resolves it via
+ * getClaims), never request input, so interpolating it into a PostgREST filter
+ * introduces no injection surface.
+ */
+const participantFilter = (userId: string) =>
+	`buyer_id.eq.${userId},seller_id.eq.${userId}` as const;
+
 // ── Query helpers ───────────────────────────────────────────────────────────
 
 /** Conversations for the user, newest activity first, with listing + counterpart + unread + preview. */
@@ -50,9 +78,14 @@ export async function listConversations(
 	userId: string
 ): Promise<ConversationListItem[]> {
 	// Embed only the newest message per conversation, for the one-line row preview.
+	//
+	// ADM-36: the `.or()` is the scoping. `userId` used to reach only
+	// buildSummary, which picks the counterpart to display — it decided what the
+	// row SAID, never which rows came back.
 	const { data: convs } = await supabase
 		.from('conversations')
 		.select(`${CONVERSATION_COLUMNS}, messages(body)`)
+		.or(participantFilter(userId))
 		.order('last_message_at', { ascending: false })
 		.order('created_at', { referencedTable: 'messages', ascending: false })
 		.limit(1, { referencedTable: 'messages' });
@@ -99,8 +132,15 @@ export async function getConversation(
 		.from('conversations')
 		.select(CONVERSATION_COLUMNS)
 		.eq('id', conversationId)
+		.or(participantFilter(userId))
 		.maybeSingle();
-	if (!conv) return null; // not found, or RLS hid it (not a participant)
+	// ADM-36: null means "no such conversation, or the caller is not a party to
+	// it" — and those two now coincide for EVERY role. They used to coincide only
+	// for non-admins: this read was scoped by RLS alone, whose admin arm returned
+	// the row, so the 404 the thread route raises was load-bearing by accident
+	// and simply did not fire for an admin. The filter above is what makes the
+	// comment true rather than merely usually true.
+	if (!conv) return null;
 
 	const [parties, listings] = await Promise.all([
 		fetchParties(supabase, [conv]),
@@ -109,21 +149,55 @@ export async function getConversation(
 	return buildSummary(conv, userId, parties, listings);
 }
 
-/** Messages in a conversation, oldest-first. RLS restricts this to participants. */
-export async function listMessages(supabase: DB, conversationId: string): Promise<ThreadMessage[]> {
+/**
+ * Messages in a conversation, oldest-first, scoped to a participant.
+ *
+ * ADM-36. `messages` carries no party columns of its own, so the scope is an
+ * INNER JOIN onto the parent conversation with the participant filter applied
+ * there: a caller who is neither party matches no parent row and therefore
+ * receives no messages. `messages_select` keeps its `OR is_admin()` arm
+ * (ADM-37) and is no longer what decides this.
+ *
+ * FILTERED IN SQL RATHER THAN SEQUENCED BEHIND getConversation. The thread route
+ * runs both in one Promise.all, so a dependency on getConversation's result
+ * would have to serialise them — and an ordering that happens to be safe is not
+ * a check. Making this query self-scoping keeps the parallelism and removes the
+ * possibility of a future caller getting the order wrong.
+ */
+export async function listMessages(
+	supabase: DB,
+	userId: string,
+	conversationId: string
+): Promise<ThreadMessage[]> {
 	const { data } = await supabase
 		.from('messages')
-		.select('id, sender_id, body, created_at')
+		.select('id, sender_id, body, created_at, conversations!inner(buyer_id, seller_id)')
 		.eq('conversation_id', conversationId)
+		.or(participantFilter(userId), { referencedTable: 'conversations' })
 		.order('created_at', { ascending: true });
-	return data ?? [];
+
+	// Drop the join column the filter needed; the thread renders only these four.
+	return (data ?? []).map((m) => ({
+		id: m.id,
+		sender_id: m.sender_id,
+		body: m.body,
+		created_at: m.created_at
+	}));
 }
 
 /** Count of the user's UNREAD conversations (D5) — for the header badge. */
 export async function unreadConversationCount(supabase: DB, userId: string): Promise<number> {
+	// ADM-36: scoped in SQL. The returned COUNT was already correct without this
+	// — isConversationUnread resolves lastRead to null when the caller is neither
+	// party and returns false — but the QUERY pulled every conversation row on
+	// the platform into this function for an admin, on every page load and every
+	// incoming message, both parties' ids and read timestamps included. The JS
+	// predicate was doing scoping the SQL should have done; it stays as
+	// belt-and-braces rather than as the only thing standing there.
 	const { data } = await supabase
 		.from('conversations')
-		.select('buyer_id, seller_id, last_message_at, buyer_last_read_at, seller_last_read_at');
+		.select('buyer_id, seller_id, last_message_at, buyer_last_read_at, seller_last_read_at')
+		.or(participantFilter(userId));
 	if (!data) return 0;
 	return data.reduce((n, c) => (isConversationUnread(c, userId) ? n + 1 : n), 0);
 }
