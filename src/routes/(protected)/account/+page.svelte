@@ -1,54 +1,14 @@
-<script lang="ts">
-	import type { PageData } from './$types';
+<!--
+	UNREACHABLE BY CONSTRUCTION (ADM-40). +page.server.ts redirects every request
+	to /account/profile before this can render, but SvelteKit requires a
+	+page.svelte for the route to exist as a page at all — and the route has to
+	keep existing, because login, signup, the onboarding page and both Account nav
+	entries all still point at /account.
 
-	let { data }: { data: PageData } = $props();
-</script>
-
-<svelte:head><title>Account · Marketplace</title></svelte:head>
-
-<main class="mx-auto max-w-2xl px-4 py-10">
-	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-gray-900">Your account</h1>
-		<a href="/account/profile" class="text-sm font-medium text-emerald-700 underline"
-			>Edit profile</a
-		>
-	</div>
-	<p class="mt-1 text-sm text-gray-600">You're signed in.</p>
-
-	<dl class="mt-6 divide-y divide-gray-200 rounded-lg border border-gray-200">
-		<div class="flex justify-between px-4 py-3">
-			<dt class="text-sm font-medium text-gray-500">Name</dt>
-			<dd class="text-sm text-gray-900">{data.profile?.full_name ?? '—'}</dd>
-		</div>
-		<div class="flex justify-between px-4 py-3">
-			<dt class="text-sm font-medium text-gray-500">Email</dt>
-			<dd class="text-sm text-gray-900">{data.email}</dd>
-		</div>
-		<div class="flex justify-between px-4 py-3">
-			<dt class="text-sm font-medium text-gray-500">Phone</dt>
-			<dd class="text-sm text-gray-900">{data.profile?.phone ?? '—'}</dd>
-		</div>
-		<div class="flex justify-between px-4 py-3">
-			<dt class="text-sm font-medium text-gray-500">Role</dt>
-			<dd>
-				<span
-					class="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 capitalize"
-				>
-					{data.role ?? 'buyer'}
-				</span>
-			</dd>
-		</div>
-	</dl>
-
-	{#if data.role === 'buyer'}
-		<div class="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-			<p class="text-sm text-gray-700">Want to start selling?</p>
-			<a
-				href="/sell"
-				class="mt-2 inline-block rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-			>
-				Become a seller
-			</a>
-		</div>
-	{/if}
-</main>
+	It is a stub rather than the old markup on purpose. What was here was written
+	before the design foundation and used raw gray/emerald utilities; its content
+	now lives on /account/profile, which is built from the foundation primitives.
+	Leaving the old version behind would leave unmigrated markup in the tree for
+	someone to later "fix" in place, on a page no one can reach.
+-->
+<p>Redirecting to your account…</p>
