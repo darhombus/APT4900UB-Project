@@ -96,13 +96,49 @@
 	}
 </script>
 
-<svelte:head><title>Edit profile · MySoko</title></svelte:head>
+<svelte:head><title>Your account · MySoko</title></svelte:head>
 
 <main class="mx-auto max-w-2xl space-y-8 px-4 py-10">
+	<!-- ADM-40 — /account merged into this page, so this is now THE account page
+	     and the heading says so.
+
+	     THE TWO FACTS THIS PAGE CANNOT CHANGE SIT IN THE HEADER, not in a fifth
+	     card. Your email address and your role are the account's identity; every
+	     Card below is something you edit. Keeping them as page context rather
+	     than as another section is what stops the merge reading as two pages
+	     stapled together — a reader sees who they are, then what they can
+	     change. -->
 	<div>
-		<h1 class="font-display text-2xl font-bold text-ink">Edit profile</h1>
-		<p class="mt-1 text-sm text-muted">Manage your details, photo, and password.</p>
+		<h1 class="font-display text-2xl font-bold text-ink">Your account</h1>
+		<p class="mt-1 text-sm text-muted">Your details, photo, email preferences, and password.</p>
+
+		<dl class="mt-4 flex flex-wrap items-center gap-x-8 gap-y-2">
+			<div class="flex min-w-0 items-baseline gap-2">
+				<!-- "Email address", never bare "Email": the notification toggle below
+				     is also about email, and one word for both controls would make an
+				     address and a preference read as the same thing. -->
+				<dt class="flex-none text-sm text-muted">Email address</dt>
+				<dd class="min-w-0 truncate text-sm font-medium text-ink">{data.email}</dd>
+			</div>
+			<div class="flex items-center gap-2">
+				<dt class="text-sm text-muted">Role</dt>
+				<dd><Badge variant="brand" class="capitalize">{data.role ?? 'buyer'}</Badge></dd>
+			</div>
+		</dl>
 	</div>
+
+	<!-- Buyers only, gate unchanged from /account. It sits directly under the role
+	     it follows from — "you are a buyer, here is the one thing you can become"
+	     — rather than at the foot of the page where a buyer would never scroll. -->
+	{#if data.role === 'buyer'}
+		<Card>
+			<h2 class="text-lg font-semibold text-ink">Start selling</h2>
+			<p class="mt-1 text-sm text-muted">
+				Sellers list items and services, take payments, and get paid out to Mpesa.
+			</p>
+			<Button href="/sell" class="mt-4">Become a seller</Button>
+		</Card>
+	{/if}
 
 	<!-- ── Photo ───────────────────────────────────────────────────────────── -->
 	<Card>
@@ -188,24 +224,22 @@
 				/>
 			</div>
 
-			<div class="grid grid-cols-2 gap-4">
-				<div>
-					<span class="mb-1 block text-sm font-medium text-ink">Email</span>
-					<p class="text-sm text-muted">{data.email}</p>
-				</div>
-				<div>
-					<span class="mb-1 block text-sm font-medium text-ink">Role</span>
-					<Badge variant="brand"><span class="capitalize">{profile?.role ?? 'buyer'}</span></Badge>
-				</div>
-			</div>
-
+			<!-- ADM-40: the email address and role badge used to sit HERE, read-only,
+			     inside the form that saves the editable fields — styled like the
+			     labels above them and submitting nothing. They now live in the page
+			     header, where nothing around them is editable. This form contains
+			     only what "Save changes" actually writes. -->
 			<Button type="submit">Save changes</Button>
 		</form>
 	</Card>
 
 	<!-- ── Email notifications (NTF-4) ─────────────────────────────────────── -->
+	<!-- Titled "Email notifications", not "Email" (ADM-40). Since the merge, the
+	     header above shows the account's email ADDRESS, and two sections both
+	     headed "Email" would read as one control split in half — one is who we
+	     write to, this one is whether we write at all. -->
 	<Card>
-		<h2 class="text-lg font-semibold text-ink">Email</h2>
+		<h2 class="text-lg font-semibold text-ink">Email notifications</h2>
 
 		<form
 			method="POST"

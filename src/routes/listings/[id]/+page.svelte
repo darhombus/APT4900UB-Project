@@ -38,12 +38,25 @@
 	const isPublic = $derived(listing.status === 'active' || listing.status === 'sold');
 	const condition = $derived(listing.condition ? conditionLabel(listing.condition) : null);
 
+	// ADM-26 — an admin is staff, not a marketplace participant, so neither
+	// participant action on this page is offered to them. `data.isAdmin` comes
+	// from the root layout load, exactly like `data.session` below; the page adds
+	// no query of its own. Verification is browsing, not participating (ADM-17),
+	// so everything else here is unchanged for an admin: they still read the
+	// listing, its images, the seller panel and the reviews.
+	//
+	// The affordance is the display half only. The database refuses them
+	// independently — conversations_insert carries AND NOT is_admin() (ADM-20)
+	// and create_pending_order raises admin_cannot_purchase (ADM-18) — so a
+	// crafted POST is refused whether or not this condition is present.
+	const isParticipant = $derived(!data.isAdmin);
+
 	// Message button (D3): shown only to a non-owner viewing an ACTIVE listing.
 	// Sold/paused/removed/deleted never show it (paused/removed aren't publicly
 	// reachable anyway; owners never see it on their own listing). Logged-out visitors
 	// get a login link that returns here; authenticated non-owners post to the
 	// startConversation action, which opens or resumes the thread.
-	const canMessage = $derived(listing.status === 'active' && !data.isOwner);
+	const canMessage = $derived(listing.status === 'active' && !data.isOwner && isParticipant);
 	const loginHref = $derived(`/login?redirectTo=${encodeURIComponent(`/listings/${listing.id}`)}`);
 
 	// Buy Now (D1/D3) gates on exactly the same conditions as the message button —
@@ -51,7 +64,7 @@
 	//   held by me    → resume the payment, or cancel it
 	//   held by other → disabled, because create_pending_order would reject it
 	//   no hold       → buy (form POST for signed-in, login link for anonymous)
-	const canBuy = $derived(listing.status === 'active' && !data.isOwner);
+	const canBuy = $derived(listing.status === 'active' && !data.isOwner && isParticipant);
 	const hold = $derived(data.checkoutHold);
 
 	let messaging = $state(false);

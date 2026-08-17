@@ -21,15 +21,26 @@
 	let { data, children } = $props();
 	let { session, supabase } = $derived(data);
 	const profile = $derived(data.profile);
+	// ADM-28: seller-only since ADM-25 closed /sell to admins. Display signal for
+	// the seller nav entries; it gates no route.
 	const isSeller = $derived(data.isSeller);
-	// BST-20. Distinct from `isSeller` on purpose: admins keep /sell entry
-	// (listings, sales, payouts) but cannot create listings (BST-19), so the
-	// create affordance must not be offered to them.
+	// BST-20. Definitionally identical to `isSeller` after ADM-28, and kept
+	// separate on purpose: this gates the "New listing" button, isSeller gates
+	// the nav entries, and the two can diverge again.
 	const canCreateListing = $derived(data.canCreateListing);
-	// ADM-14. Which navigation an admin is SHOWN — not what they may reach.
-	// /admin is gated by requireRole(..., { hide: true }); admins keep their
-	// /sell/* access by URL (ADM-2) and simply are not pointed there.
+	// ADM-14 + ADM-26. Which navigation an admin is SHOWN, and which participant
+	// affordances they are NOT — an admin is staff, not a marketplace
+	// participant. Routes are gated elsewhere: /admin by requireRole(...,
+	// { hide: true }), /sell by its own layout guard (ADM-25).
 	const isAdmin = $derived(data.isAdmin);
+	// ADM-26 — the participant affordances an admin does not get: Buy now,
+	// Message seller, Orders, Messages, the notification bell, and both Realtime
+	// subscriptions. Named once and shared so the header's avatar badge and its
+	// Messages menu entry cannot drift apart: the badge is aria-hidden and takes
+	// its accessible name from that entry's aria-label, so hiding either alone
+	// leaves a visible count with no accessible name pointing at a destination
+	// that no longer exists.
+	const isParticipant = $derived(!isAdmin);
 	const categoryTree = $derived(data.categoryTree);
 
 	// Unread-conversation badge (D5). Seeded from the server-computed layout value
@@ -176,10 +187,19 @@
 	// to the user's own conversations (the messages SELECT policy is evaluated per
 	// subscriber), so an unfiltered INSERT subscription only ever delivers messages
 	// they may see. Recompute is coalesced so a burst can't thrash the count endpoint.
+	//
+	// ADM-26 — NOT OPENED FOR AN ADMIN. This reverses an earlier draft that kept
+	// this subscription while removing only its notifications twin. Every render
+	// consumer of the messages store is now hidden for an admin (the avatar
+	// badge, the Messages menu entry, the drawer entry), so for that role the
+	// store is write-only and this channel would poll /api/unread-count on every
+	// incoming message to update nothing. The thread page at
+	// messages/[conversationId] is unaffected: it WRITES the store after its own
+	// fetch and never depended on this subscription.
 	$effect(() => {
 		const uid = userId;
 		const token = accessToken;
-		if (!uid || !supabase) return;
+		if (!uid || !supabase || !isParticipant) return;
 		const client = supabase;
 		void client.realtime.setAuth(token);
 
@@ -220,10 +240,17 @@
 	// no sender to compare against here, because every row that arrives is by
 	// definition for this user. Coalesced for the same reason: a burst of events
 	// (an order completing notifies both parties) must not thrash the endpoint.
+	//
+	// ADM-26 — NOT OPENED FOR AN ADMIN. No notification type resolves to an admin
+	// recipient (every recipient is read off the order, payout, review, boost or
+	// dispute record, never off role), and ADM-26 removes the bell that would
+	// display the count, so this channel can only ever cost. /notifications stays
+	// reachable under ADM-29, and the page reads its own count server-side — it
+	// does not depend on this subscription.
 	$effect(() => {
 		const uid = userId;
 		const token = accessToken;
-		if (!uid || !supabase) return;
+		if (!uid || !supabase || !isParticipant) return;
 		const client = supabase;
 		void client.realtime.setAuth(token);
 
@@ -397,40 +424,51 @@
 							<!-- The bell sits BESIDE the account menu, not inside it (NTF-18):
 							     two distinct icons, so a glance tells the two counts apart.
 							     Notifications are a place you go, not a menu you open, so it is
-							     a plain link to the inbox rather than a dropdown. -->
-							<a
-								href="/notifications"
-								data-testid="header-bell"
-								aria-label={notificationCount > 0
-									? `Notifications, ${notificationLabel} unread`
-									: 'Notifications'}
-								class="relative flex h-10 w-10 items-center justify-center rounded-control transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
-							>
-								<svg class="h-5 w-5 text-white" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-									<path
-										d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 2.6-.6 4.1-1.1 4.9a.6.6 0 0 0 .5.9h10.2a.6.6 0 0 0 .5-.9c-.5-.8-1.1-2.3-1.1-4.9A4.5 4.5 0 0 0 10 3Z"
-										stroke="currentColor"
-										stroke-width="1.6"
-										stroke-linejoin="round"
-									/>
-									<path
-										d="M8.3 16a1.8 1.8 0 0 0 3.4 0"
-										stroke="currentColor"
-										stroke-width="1.6"
-										stroke-linecap="round"
-									/>
-								</svg>
-								{#if notificationCount > 0}
-									<!-- Glanceable count; the link's aria-label carries it for AT. -->
-									<span
-										data-testid="header-notification-badge"
+							     a plain link to the inbox rather than a dropdown.
+
+							     ADM-26: not offered to an admin. No notification type resolves
+							     to an admin recipient, so for that role this was permanently
+							     dead UI. /notifications itself stays reachable (ADM-29). -->
+							{#if isParticipant}
+								<a
+									href="/notifications"
+									data-testid="header-bell"
+									aria-label={notificationCount > 0
+										? `Notifications, ${notificationLabel} unread`
+										: 'Notifications'}
+									class="relative flex h-10 w-10 items-center justify-center rounded-control transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
+								>
+									<svg
+										class="h-5 w-5 text-white"
+										viewBox="0 0 20 20"
+										fill="none"
 										aria-hidden="true"
-										class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1 text-[10px] font-bold text-white ring-2 ring-brand-strong"
 									>
-										{notificationLabel}
-									</span>
-								{/if}
-							</a>
+										<path
+											d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 2.6-.6 4.1-1.1 4.9a.6.6 0 0 0 .5.9h10.2a.6.6 0 0 0 .5-.9c-.5-.8-1.1-2.3-1.1-4.9A4.5 4.5 0 0 0 10 3Z"
+											stroke="currentColor"
+											stroke-width="1.6"
+											stroke-linejoin="round"
+										/>
+										<path
+											d="M8.3 16a1.8 1.8 0 0 0 3.4 0"
+											stroke="currentColor"
+											stroke-width="1.6"
+											stroke-linecap="round"
+										/>
+									</svg>
+									{#if notificationCount > 0}
+										<!-- Glanceable count; the link's aria-label carries it for AT. -->
+										<span
+											data-testid="header-notification-badge"
+											aria-hidden="true"
+											class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1 text-[10px] font-bold text-white ring-2 ring-brand-strong"
+										>
+											{notificationLabel}
+										</span>
+									{/if}
+								</a>
+							{/if}
 							<details use:autoClose class="group relative">
 								<summary
 									aria-label="Account menu"
@@ -438,7 +476,13 @@
 								>
 									<span class="relative flex-none">
 										{@render avatar('h-8 w-8')}
-										{#if unreadCount > 0}
+										<!-- ADM-26: `isParticipant` here is PAIRED with the Messages menu
+										     entry below and must not be separated from it. This badge is
+										     aria-hidden and has no accessible name of its own — the
+										     Messages entry's aria-label is its only one. Hiding one
+										     without the other leaves a visible count that screen readers
+										     cannot name, pointing at a destination that is gone. -->
+										{#if isParticipant && unreadCount > 0}
 											<!-- Glanceable unread count; the Messages menu item carries the accessible label. -->
 											<span
 												data-testid="header-unread-badge"
@@ -467,24 +511,37 @@
 								<div
 									class="absolute right-0 mt-2 w-52 rounded-card border border-border bg-surface p-1 shadow-menu"
 								>
-									<a
-										href="/messages"
-										class={`${menuItem} flex items-center justify-between`}
-										onclick={closeMenu}
-										aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
-									>
-										<span>Messages</span>
-										{#if unreadCount > 0}
-											<span
-												aria-hidden="true"
-												class="flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
-											>
-												{unreadLabel}
-											</span>
-										{/if}
-									</a>
-									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
-									<a href="/account/orders" class={menuItem} onclick={closeMenu}>Orders</a>
+									<!-- ADM-26: Messages is a participant capability. PAIRED with the
+									     avatar badge above — this entry's aria-label is that badge's
+									     only accessible name, so the two are gated together. -->
+									{#if isParticipant}
+										<a
+											href="/messages"
+											class={`${menuItem} flex items-center justify-between`}
+											onclick={closeMenu}
+											aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
+										>
+											<span>Messages</span>
+											{#if unreadCount > 0}
+												<span
+													aria-hidden="true"
+													class="flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+												>
+													{unreadLabel}
+												</span>
+											{/if}
+										</a>
+									{/if}
+									<!-- ADM-27: the account page is retained in full for every role.
+									     ADM-41 links the destination, not /account, which only
+									     redirects — one fewer serverless hop on a cold tier. -->
+									<a href="/account/profile" class={menuItem} onclick={closeMenu}>Account</a>
+									<!-- ADM-26: an admin holds no orders and cannot open one (ADM-18).
+									     The ROUTE stays reachable (ADM-29) so a legacy in-flight order
+									     can still be discharged; only the nav entry goes. -->
+									{#if isParticipant}
+										<a href="/account/orders" class={menuItem} onclick={closeMenu}>Orders</a>
+									{/if}
 									{#if isAdmin}
 										<!-- ADM-14: admin navigation INSTEAD OF seller navigation. An
 										     admin does not sell, so My listings / Sales / Payouts are
