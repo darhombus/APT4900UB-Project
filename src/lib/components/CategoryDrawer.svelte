@@ -194,12 +194,18 @@
 					     redirects. Every hop is a separate serverless invocation, so on a
 					     cold tier the round-trip is the latency, not the work. Logged-out
 					     keeps /sell, which routes through the login guard as before. -->
-					{#if isAdmin}
-						<!-- ADM-14: "Sell on MySoko" is a dead end for an admin — BST-19
-						     refuses their INSERT and BST-20 already removed the create
-						     affordance. Point them at the surface they actually work on. -->
-						<a href="/admin" class={navItem} onclick={onclose}>Admin dashboard</a>
-					{:else}
+					<!-- ADM-34: Explore offers an admin NOTHING here. The Admin dashboard
+					     link lives once, in the Account section below; ADM-14 put a second
+					     copy in this slot when it displaced "Sell on MySoko", and two
+					     identical links to the same destination in one drawer is noise.
+
+					     GATED ON `!isAdmin`, NOT LEFT AS AN {:else}. Deleting the admin arm
+					     alone would drop an admin into the else and offer them a seller CTA
+					     pointing at /sell — which ADM-25 now redirects to /admin, so the
+					     link would bounce. A fallback arm inheriting a case it was never
+					     written for is the widening pattern; this states the condition
+					     instead. -->
+					{#if !isAdmin}
 						<a
 							href={!loggedIn ? '/sell' : isSeller ? '/sell/listings' : '/sell/onboarding'}
 							class={navItem}
@@ -226,41 +232,54 @@
 								{profile?.full_name ?? 'Your account'}
 							</span>
 						</div>
-						<a
-							href="/messages"
-							class={navItem}
-							onclick={onclose}
-							aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
-						>
-							<span>Messages</span>
-							{#if unreadCount > 0}
-								<span
-									aria-hidden="true"
-									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
-								>
-									{unreadLabel}
-								</span>
-							{/if}
-						</a>
-						<a
-							href="/notifications"
-							class={navItem}
-							onclick={onclose}
-							aria-label={notificationCount > 0
-								? `Notifications, ${notificationLabel} unread`
-								: 'Notifications'}
-						>
-							<span>Notifications</span>
-							{#if notificationCount > 0}
-								<span
-									aria-hidden="true"
-									class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
-								>
-									{notificationLabel}
-								</span>
-							{/if}
-						</a>
-						<a href="/account" class={navItem} onclick={onclose}>Account</a>
+						<!-- ADM-26: Messages and Notifications are participant capabilities and
+						     are not offered to an admin. Unlike the header pair, each of these
+						     is SELF-CONTAINED — the aria-hidden badge is nested inside the
+						     anchor that carries the aria-label — so hiding the entry removes
+						     the badge and its accessible name together. No paired treatment is
+						     needed here. Both routes stay reachable by URL (ADM-29). -->
+						{#if !isAdmin}
+							<a
+								href="/messages"
+								class={navItem}
+								onclick={onclose}
+								aria-label={unreadCount > 0 ? `Messages, ${unreadLabel} unread` : 'Messages'}
+							>
+								<span>Messages</span>
+								{#if unreadCount > 0}
+									<span
+										aria-hidden="true"
+										class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+									>
+										{unreadLabel}
+									</span>
+								{/if}
+							</a>
+							<a
+								href="/notifications"
+								class={navItem}
+								onclick={onclose}
+								aria-label={notificationCount > 0
+									? `Notifications, ${notificationLabel} unread`
+									: 'Notifications'}
+							>
+								<span>Notifications</span>
+								{#if notificationCount > 0}
+									<span
+										aria-hidden="true"
+										class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-1.5 text-xs font-bold text-white"
+									>
+										{notificationLabel}
+									</span>
+								{/if}
+							</a>
+						{/if}
+						<!-- ADM-27: the account page is retained in full for every role.
+						     ADM-41 points straight at /account/profile rather than at
+						     /account, which only redirects — same reasoning as the Sell link
+						     above: every hop is a separate serverless invocation, so on a
+						     cold tier the round-trip is the latency, not the work. -->
+						<a href="/account/profile" class={navItem} onclick={onclose}>Account</a>
 						<!-- Sellers only. A buyer's single route into selling is the
 						     "Sell on MySoko" link above, which lands on onboarding via the
 						     /sell guard — offering "My listings" as well gave them two

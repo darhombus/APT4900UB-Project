@@ -7,7 +7,8 @@ import type { Actions, PageServerLoad } from './$types';
 // the platform edge (Vercel/Cloudflare) fronts the app. See auth PRD Section 5.
 
 export const load: PageServerLoad = async ({ locals: { session } }) => {
-	if (session) redirect(303, '/account');
+	// ADM-41: the destination, not /account, which only redirects here anyway.
+	if (session) redirect(303, '/account/profile');
 };
 
 export const actions: Actions = {

@@ -14,10 +14,16 @@ import type { PageServerLoad } from './$types';
  * (the guard's to /sell/onboarding and this one's to /sell/listings), and the
  * loser could cost a wasted hop.
  *
- * In practice nothing but sellers and admins reaches the redirect below, since
- * the guard redirects buyers away while this load is still awaiting the parent.
- * The role check is kept regardless, so the destination is right on its own
- * terms rather than by relying on a guard in another file.
+ * In practice nothing but sellers reaches the redirect below, since the guard
+ * redirects buyers to onboarding and admins to /admin (ADM-25) while this load
+ * is still awaiting the parent. The role check is kept regardless, so the
+ * destination is right on its own terms rather than by relying on a guard in
+ * another file.
+ *
+ * The admin arm of that check was removed in ADM-17: `parent()` returns the
+ * /sell layout's `role`, and since ADM-25's branch redirects admins before
+ * either of the layout's two returns, the inherited type is
+ * 'seller' | 'buyer' | null — 'admin' is not in it, so the comparison was dead.
  *
  * Note this route is now rarely hit at all: the sidebar link and the onboarding
  * guard both point straight at their destination, precisely so nobody pays for
@@ -25,5 +31,5 @@ import type { PageServerLoad } from './$types';
  */
 export const load: PageServerLoad = async ({ parent }) => {
 	const { role } = await parent();
-	redirect(303, role === 'seller' || role === 'admin' ? '/sell/listings' : '/sell/onboarding');
+	redirect(303, role === 'seller' ? '/sell/listings' : '/sell/onboarding');
 };

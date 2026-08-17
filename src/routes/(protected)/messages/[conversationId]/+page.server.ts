@@ -15,12 +15,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, user } 
 	// old sequential chain was ~5 DB round-trips before the thread could render).
 	// markRead is best-effort but still awaited here so it completes on serverless
 	// (a fire-and-forget promise can be frozen after the response); it runs in
-	// parallel, so it no longer adds to the critical path. A non-participant gets
-	// null from getConversation (→ 404); listMessages/markRead are RLS-scoped and
-	// simply no-op for them.
+	// parallel, so it no longer adds to the critical path.
+	//
+	// ADM-36: all three are now scoped to the caller as a PARTICIPANT, in their
+	// own queries rather than by RLS. A non-participant — including an admin —
+	// gets null from getConversation (→ 404) and no rows from listMessages, and
+	// markRead matches neither party so it writes nothing. Each holds on its own;
+	// none of them depends on the others running first, which is what keeps this
+	// Promise.all safe to reorder.
 	const [conversation, messages] = await Promise.all([
 		getConversation(supabase, user.id, params.conversationId),
-		listMessages(supabase, params.conversationId),
+		listMessages(supabase, user.id, params.conversationId),
 		markRead(supabase, user.id, params.conversationId)
 	]);
 	if (!conversation) error(404, 'Conversation not found');

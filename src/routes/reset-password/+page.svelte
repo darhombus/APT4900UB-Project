@@ -9,7 +9,8 @@
 	let { form }: { form: ActionData } = $props();
 	const errors = $derived(form && 'errors' in form ? (form.errors ?? {}) : {});
 
-	// Success redirects to /account with a toast that survives the navigation;
+	// Success redirects to '/' with a toast that survives the navigation (the
+	// server action's target — this comment said /account and never matched it);
 	// a failure toasts its message while field errors stay inline.
 	const onSubmit: SubmitFunction =
 		() =>

@@ -241,9 +241,14 @@
 					</a>
 				{/if}
 
+				<!-- ADM-38: points at the admin-scoped view, not /messages/<id>. ADM-36
+				     scoped the participant thread route to its participants, so that
+				     link 404'd for an admin; this route reads the same thread through
+				     the admin arms, authorised by the /admin guard and scoped to the
+				     conversation THIS dispute concerns. -->
 				{#if data.conversationId}
 					<a
-						href="/messages/{data.conversationId}"
+						href="/admin/disputes/{data.dispute.id}/messages"
 						class="mt-3 inline-block text-sm font-medium text-brand hover:text-brand-hover"
 					>
 						Read their messages →

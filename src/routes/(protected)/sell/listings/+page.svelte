@@ -273,21 +273,17 @@
 	{#if data.counts.all === 0}
 		<Card class="text-center">
 			<div class="mx-auto max-w-sm py-8">
-				{#if data.role === 'admin'}
-					<!-- BST-20: an admin reaches this page (ADM-2 keeps their /sell entry)
-					     but cannot create listings (BST-19), so the empty state states the
-					     rule rather than offering an action that would be refused. -->
-					<h2 class="font-display text-lg font-semibold text-ink">No listings</h2>
-					<p class="mt-1 text-sm text-muted">
-						Admin accounts don't sell. Listing creation is a seller capability.
-					</p>
-				{:else}
-					<h2 class="font-display text-lg font-semibold text-ink">Nothing listed yet</h2>
-					<p class="mt-1 text-sm text-muted">
-						Post your first item or service — it only takes a couple of minutes.
-					</p>
-					<Button href="/sell/listings/new" class="mt-4">Create your first listing</Button>
-				{/if}
+				<!-- One empty state, for sellers. This previously branched on
+				     data.role === 'admin' to explain that admins do not sell — written
+				     when ADM-2 admitted admins to /sell. ADM-25 closed the route to
+				     them, so only a seller reaches this page and that arm was
+				     unreachable. The remaining copy is the one it was always written
+				     for, not a fallback widened onto a case it never handled. -->
+				<h2 class="font-display text-lg font-semibold text-ink">Nothing listed yet</h2>
+				<p class="mt-1 text-sm text-muted">
+					Post your first item or service — it only takes a couple of minutes.
+				</p>
+				<Button href="/sell/listings/new" class="mt-4">Create your first listing</Button>
 			</div>
 		</Card>
 	{:else}
