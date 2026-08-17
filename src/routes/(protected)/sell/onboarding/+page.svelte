@@ -29,7 +29,10 @@
 		</button>
 	</form>
 
-	<a href="/account" class="mt-4 text-center text-sm font-medium text-emerald-700 underline">
+	<a
+		href="/account/profile"
+		class="mt-4 text-center text-sm font-medium text-emerald-700 underline"
+	>
 		Not now — back to my account
 	</a>
 </main>

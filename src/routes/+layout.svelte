@@ -532,8 +532,10 @@
 											{/if}
 										</a>
 									{/if}
-									<!-- ADM-27: /account is retained in full for every role. -->
-									<a href="/account" class={menuItem} onclick={closeMenu}>Account</a>
+									<!-- ADM-27: the account page is retained in full for every role.
+									     ADM-41 links the destination, not /account, which only
+									     redirects — one fewer serverless hop on a cold tier. -->
+									<a href="/account/profile" class={menuItem} onclick={closeMenu}>Account</a>
 									<!-- ADM-26: an admin holds no orders and cannot open one (ADM-18).
 									     The ROUTE stays reachable (ADM-29) so a legacy in-flight order
 									     can still be discharged; only the nav entry goes. -->

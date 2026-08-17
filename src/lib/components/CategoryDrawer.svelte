@@ -274,8 +274,12 @@
 								{/if}
 							</a>
 						{/if}
-						<!-- ADM-27: /account is retained in full for every role. -->
-						<a href="/account" class={navItem} onclick={onclose}>Account</a>
+						<!-- ADM-27: the account page is retained in full for every role.
+						     ADM-41 points straight at /account/profile rather than at
+						     /account, which only redirects — same reasoning as the Sell link
+						     above: every hop is a separate serverless invocation, so on a
+						     cold tier the round-trip is the latency, not the work. -->
+						<a href="/account/profile" class={navItem} onclick={onclose}>Account</a>
 						<!-- Sellers only. A buyer's single route into selling is the
 						     "Sell on MySoko" link above, which lands on onboarding via the
 						     /sell guard — offering "My listings" as well gave them two

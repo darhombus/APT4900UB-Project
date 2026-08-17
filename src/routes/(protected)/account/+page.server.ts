@@ -2,30 +2,32 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 /**
- * /account is now a redirect to /account/profile (ADM-40).
+ * /account is a 303 to /account/profile (ADM-40).
  *
  * The two pages had grown into one thing read twice: /account displayed name,
  * email, phone and role read-only and linked to /account/profile, which edited
- * name and phone. ADM-40 merged them, and the three items that lived ONLY here
- * — the email display, the role badge and the buyer-gated "Become a seller" CTA
- * — moved to /account/profile rather than being dropped.
+ * name, phone and location and held the NTF-4 toggle and the password form.
+ * ADM-40 merged them into /account/profile.
  *
- * A REDIRECT, NOT A DELETED ROUTE. Four things still point at /account and all
- * of them keep working because this exists: login/+page.server.ts and
- * signup/+page.server.ts both redirect(303, '/account') for an already-signed-in
- * visitor, sell/onboarding/+page.svelte links back to it after an upgrade, and
- * the Account entries in the header menu and the drawer. Deleting the route
- * would turn a cosmetic merge into a sweep across all of them, and would leave
- * bookmarks and any external link 404ing.
+ * NOTHING INSIDE THE APP POINTS HERE ANY MORE, AND THE ROUTE STAYS ANYWAY.
+ * ADM-41 repointed every internal link and redirect — both Account nav entries,
+ * the already-signed-in bounces on /login and /signup, and the onboarding page's
+ * "back to my account" — straight at /account/profile, because a link to a
+ * redirect costs a second serverless invocation and on a cold tier that
+ * round-trip IS the latency (the same reasoning recorded at
+ * CategoryDrawer.svelte's Sell link).
  *
- * The login and signup redirects are deliberately NOT repointed here. They land
- * on /account and bounce, which means the destination is decided in exactly one
- * place — this file — and a future move of the account page changes one line
- * rather than five.
+ * So this is deliberately a route with no internal callers. It is the catch-all
+ * for the arrivals nobody controls: bookmarks, typed URLs, links shared or
+ * indexed before the merge, and anything external. Those cannot be repointed,
+ * and deleting this route would 404 every one of them silently — which is
+ * exactly the failure a redirect exists to prevent. Do not remove it because
+ * "nothing links to it": that is the point, and e2e asserts the 303 so the
+ * removal cannot pass quietly.
  *
- * 303, matching every other redirect in the app: the request that arrives may be
- * a POST (the login form's), and 303 is what tells the browser to follow with a
- * GET rather than replaying the body.
+ * 303, matching every other redirect in the app: the arriving request may be a
+ * POST, and 303 tells the browser to follow with a GET rather than replay the
+ * body.
  */
 export const load: PageServerLoad = () => {
 	redirect(303, '/account/profile');
