@@ -42,7 +42,7 @@ Row level security is enabled on every table, so a query returns only the rows t
 
 The application does not expose a dedicated statistics API. SvelteKit serves page data from server `load` functions, which run on the server and pass their results directly to the page, so aggregate figures are computed there rather than behind a REST route.
 
-The clearest example is the administrative dashboard at `/admin`, a route restricted to administrators. It displays five live figures: open disputes, removed listings, hidden reviews, active boosts, and recorded administrative actions.
+The clearest example is the admin dashboard at `/admin`. It displays five live figures: open disputes, removed listings, hidden reviews, active boosts, and recorded administrative actions.
 
 Two small JSON endpoints do exist, `GET /api/unread-count` and `GET /api/notification-count`. Each returns a single count in the form `{ "count": 7 }`, used by the header badges so they can refresh without re-running the whole page load.
 
