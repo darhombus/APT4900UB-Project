@@ -1,42 +1,84 @@
-# sv
+# MySoko
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+MySoko is an online marketplace connecting buyers and sellers in Kenya, covering consumer electronics, clothing, household goods and small services. Listings, in-app messaging, checkout and seller payouts all run through the platform.
 
-## Creating a project
+## Tech stack
 
-If you're seeing this, you've probably already done this step. Congrats!
+- SvelteKit 2 with TypeScript, server-side rendered
+- Supabase: PostgreSQL, authentication, realtime and file storage
+- Paystack for payments, Inngest for background jobs, Resend for email
+- Deployed on Vercel
 
-```sh
-# create a new project
-npx sv create my-app
+## Running the backend
+
+Prerequisites: Node.js 22, npm, and Docker, which the Supabase CLI uses to run the local database.
+
+```bash
+npm install
+cp .env.example .env   # then fill in the values
+npm run db:start       # start the local Supabase stack
+npm run db:reset       # apply all migrations
+npm run dev            # serve on http://localhost:5173
 ```
 
-To recreate this project with the same configuration:
+The four required environment variables are:
 
-```sh
-# recreate this project
-npx sv@0.16.2 create --template minimal --types ts --add prettier eslint vitest="usages:unit" tailwindcss="plugins:none" --no-download-check --install npm .
+| Variable                    | Purpose                                 |
+| --------------------------- | --------------------------------------- |
+| `PUBLIC_SUPABASE_URL`       | Supabase project URL                    |
+| `PUBLIC_SUPABASE_ANON_KEY`  | Publishable key, used in the browser    |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret key, used on the server only     |
+| `RESEND_API_KEY`            | API key for sending transactional email |
+
+The Paystack, Inngest and Africa's Talking keys are optional. See `.env.example` for the full template.
+
+## The database
+
+PostgreSQL, hosted by Supabase. Seventeen tables cover profiles, listings and their images, categories, conversations and messages, orders and payments, payouts, reviews, boosts, disputes, notifications, and an administrative audit log.
+
+Row level security is enabled on every table, so a query returns only the rows the signed-in user is permitted to see. The schema is defined by the SQL migration files in `supabase/migrations`, which `npm run db:reset` applies in order.
+
+## Statistics
+
+The application does not expose a dedicated statistics API. SvelteKit serves page data from server `load` functions, which run on the server and pass their results directly to the page, so aggregate figures are computed there rather than behind a REST route.
+
+The clearest example is the administrative dashboard at `/admin`, a route restricted to administrators. It displays five live figures: open disputes, removed listings, hidden reviews, active boosts, and recorded administrative actions.
+
+Two small JSON endpoints do exist, `GET /api/unread-count` and `GET /api/notification-count`. Each returns a single count in the form `{ "count": 7 }`, used by the header badges so they can refresh without re-running the whole page load.
+
+## How the backend retrieves the statistics
+
+The dashboard load in `src/routes/(protected)/admin/+page.server.ts` issues five counting queries in parallel, one per figure:
+
+```ts
+const [openDisputes, removedListings, hiddenReviews, activeBoosts, recentActions] =
+	await Promise.all([
+		count(
+			supabase
+				.from('disputes')
+				.select('id', { count: 'exact', head: true })
+				.in('status', ['open', 'under_review'])
+		)
+		// ... four more, one for each figure
+	]);
+
+return { openDisputes, removedListings, hiddenReviews, activeBoosts, recentActions };
 ```
 
-## Developing
+`count: 'exact'` asks PostgreSQL for a row count, and `head: true` suppresses the rows themselves, so the database returns a number rather than a list of records. The first query above is equivalent to:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```sql
+select count(*)
+  from public.disputes
+ where status in ('open', 'under_review');
 ```
 
-## Building
+The queries run through the session client, which means they execute as the signed-in user and row level security applies. Each of these tables admits administrators through its own policy, so the security check sits in the database rather than only in the route guard.
 
-To create a production version of your app:
+The load returns the five numbers as an object, SvelteKit passes it to the page as `data`, and the page renders each one as a card. The figures are counted from the tables on every request. None is stored in a column, cached, or hardcoded.
 
-```sh
-npm run build
-```
+## Current state
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- Paystack runs in test mode. A mock client replaces it locally when `PAYSTACK_MOCK=1`.
+- Email is sent from Resend's shared test domain, which delivers only to the Resend account's own verified address.
+- This repository does not include automated test suites. The available checks are `npm run lint`, `npm run check` and `npm run build`.
